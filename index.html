@@ -1442,6 +1442,7 @@ T.periods = (kind, from, to) => {   // danh sách kỳ liên tiếp phủ [from,
     else { a = D.bom(ym); b = D.eom(ym); label = 'Tháng ' + ym.slice(5) + '/' + ym.slice(0, 4); key = ym; }
     out.push({ from: a, to: b, label, key }); cur = D.addDays(b, 1);
   }
+  if (!out.length && D.parse(to || from)) return T.periods(kind, to || from, to || from);   // khoảng ngược (from > to): trả về kỳ chứa ngày cuối, tránh lỗi đọc .from
   return out;
 };
 T.deadline = (kind, per, type) => {      // hạn nộp hồ sơ khai thuế theo kỳ
@@ -1508,7 +1509,7 @@ function vatCalc(L, per, carry, adj) {
 /** Chuỗi kỳ GTGT từ kỳ đầu có dữ liệu tới kỳ chứa `to` — để chuyển [43] → [22] */
 T.vatSeries = (to) => {
   const L = L_(); if (!L.first) return []; const kind = KT.S.company.kyGTGT;
-  const first = L.first; const pers = T.periods(kind, first, to);
+  const first = L.first; const pers = T.periods(kind, first, to); if (!pers.length) return [];   // kỳ xem trước ngày bắt đầu sổ
   let carry = Math.max(0, L.balBefore('133', pers[0].from) - Math.max(0, 0));    // số dư 133 chuyển vào kỳ đầu
   const res = [];
   for (const per of pers) {
@@ -1657,7 +1658,7 @@ KT.extraChecks.push((L, add) => {
       if (v && !v.lines.some(x => x.co.startsWith('3331'))) add('warn', 'W17', 'Doanh thu chịu thuế ' + l.thue + '% nhưng chứng từ chưa có dòng thuế GTGT đầu ra (Có 33311)', l);
     }
   }
-  for (const r of T.cashFlags(L.first || '1900-01-01', L.last || '2100-01-01', L).slice(0, 30)) add('warn', 'W13', 'Chi ' + KT.f(r.cash) + ' đ tiền mặt cho hóa đơn ≥ ' + KT.f(KT.S.legal.tndn.nguongTienMat) + ' đ: không được khấu trừ GTGT và (theo Luật TNDN mới) không được tính chi phí hợp lý – dùng chuyển khoản hoặc gắn nhãn "Đã kiểm tra – được trừ" nếu thuộc diện ngoại lệ', { ct: r.vk, id: r.lines[0].id, date: r.date });
+  for (const r of T.cashFlags(L.first || '1900-01-01', L.last || '2100-01-01', L).slice(0, 30)) add('warn', 'W13', 'Chi ' + KT.f(r.cash) + ' đ tiền mặt cho hóa đơn ≥ ' + KT.f(KT.S.legal.tndn.nguongTienMat) + ' đ: không được khấu trừ GTGT và (theo Luật TNDN mới) không được tính chi phí hợp lý – dùng chuyển khoản hoặc gắn nhãn "Đã kiểm tra – được trừ" nếu thuộc diện ngoại lệ', { ct: r.vk, id: r.lines[0].id, date: r.date, cash: r.cash });
 });
 
 })(typeof globalThis !== 'undefined' ? globalThis : window);
@@ -1887,12 +1888,21 @@ A.production = (ym) => {
     const x = direct.get(k); const w = totDirect === keys.length && !keys.reduce((s, q) => s + direct.get(q)['621'] + direct.get(q)['622'], 0) ? 1 / keys.length : (x['621'] + x['622']) / totDirect;
     for (const a of ['621', '622', '627']) { const amt = x[a] + un[a] * w; if (Math.round(amt) > 0) out.push(ln(cn, to, '154', a, amt, 'Kết chuyển ' + a + ' vào giá thành ' + k + ' T' + ym.slice(5) + '/' + ym.slice(0, 4), { dh: k })); }
   }
-  return { tag: skip, lines: out, note: keys.length ? '' : 'Chưa có đơn hàng loại "Sản xuất" phát sinh chi phí 621/622/627 trong kỳ.' };
+  if (!keys.length) {   // không có đơn hàng sản xuất: coi là chi phí dịch vụ (khách sạn, nhà hàng, dịch vụ…) – gom vào 154 rồi kết chuyển giá vốn 632 ngay trong tháng
+    let tot = 0; for (const [k, x] of direct) for (const a of ['621', '622', '627']) un[a] += x[a];
+    for (const a of ['621', '622', '627']) if (Math.round(un[a]) > 0) { out.push(ln(cn, to, '154', a, un[a], 'Kết chuyển ' + a + ' vào chi phí dở dang T' + ym.slice(5) + '/' + ym.slice(0, 4))); tot += un[a]; }
+    if (Math.round(tot) > 0) out.push(ln(cn, to, '632', '154', tot, 'Giá vốn dịch vụ hoàn thành T' + ym.slice(5) + '/' + ym.slice(0, 4)));
+    return { tag: skip, lines: out, note: out.length ? 'Không có đơn hàng loại “Sản xuất” nên coi là chi phí dịch vụ: 621, 622, 627 → 154 → giá vốn 632. Nếu sản xuất nhập kho thành phẩm, hãy tạo đơn hàng loại Sản xuất và gắn mã đơn hàng vào chi phí.' : '' };
+  }
+  return { tag: skip, lines: out, note: '' };
 };
 /** Kết chuyển cuối kỳ xác định kết quả (911) */
-A.closing = (from, to, label) => {
-  const L = KT.compute(); const out = []; const key = to; const cn = 'KC' + to.slice(2, 4) + '-' + to.slice(5, 7);
-  const net = (a, side) => { const m = L.mov(a, from, to, { noClose: true }); return side === 'C' ? m.c - m.n : m.n - m.c; };
+A.manualKC = (from, to) => KT.S.journal.filter(l => !l.tag && (l.no === '911' || l.co === '911') && (D.parse(l.ng) || '') >= from && (D.parse(l.ng) || '') <= to).length;
+A.closing = (from, to, label, opt) => {
+  const L = KT.compute(); const out = []; const key = to; const cn = 'KC' + to.slice(2, 4) + '-' + to.slice(5, 7); const own = A.tagOf('kc', from + '_' + to);
+  // phần đã kết chuyển ở nơi khác (nhập tay hoặc bút toán tự động của kỳ khác) được trừ ra, để không kết chuyển hai lần; bỏ qua dòng của chính tag này (sẽ thay thế)
+  const adj = (opt && opt.gross) ? [] : L.lines.filter(l => l.date >= from && l.date <= to && ((l.close && l.tag !== own) || (!l.close && l.tag === own)));
+  const net = (a, side) => { const m = L.mov(a, from, to, { noClose: true }); let n = m.n, c = m.c; adj.forEach(l => { const s = l.close ? 1 : -1; if (l.no.startsWith(a)) n += s * l.amt; if (l.co.startsWith(a)) c += s * l.amt; }); return side === 'C' ? c - n : n - c; };
   const stage = (no, co, amt, dg) => { if (KT.rnd(amt) !== 0) out.push(ln(cn, to, no, co, amt, dg)); };
   const r521 = net('521', 'D'); stage('511', '521', r521, 'Kết chuyển giảm trừ doanh thu ' + label);
   const r511 = net('511', 'C') - r521; stage('511', '911', r511, 'Kết chuyển doanh thu thuần ' + label);
@@ -2110,7 +2120,7 @@ F2.book = r => {
    Các quy tắc là gợi ý nghiệp vụ theo hệ thống tài khoản; cảnh báo không có nghĩa là chắc chắn sai. */
 (function (G) {
 'use strict';
-const KT = G.KT, D = KT.d, A = KT.auto, f = KT.f;
+const KT = G.KT, D = KT.d, A = KT.auto, f = KT.f, H_ = KT.hr;
 const ym = l => /^\d{4}-\d{2}/.test(l.ng || '') ? l.ng.slice(0, 7) : '';
 const has = (t, ...p) => p.some(x => String(t || '').startsWith(x));
 const man = l => !l.tag;                       // dòng nhập tay (không phải bút toán tự sinh)
@@ -2158,9 +2168,11 @@ KT.audit = () => {
   const mons = [...new Set(J.map(ym).filter(Boolean))].sort(); const last = mons[mons.length - 1];
   mons.forEach(m => {
     const hasPay = S.payroll && S.payroll[m] && Object.keys((S.payroll[m] || {}).rows || {}).length;
-    if (hasPay && !A.exists(A.tagOf('bl', m))) add('warn', 'T03', 'Thiếu bút toán', 'Tháng ' + mlab(m) + ' có bảng lương nhưng chưa có bút toán lương, bảo hiểm, thuế TNCN.', 'Vào Bút toán tự động, chọn tháng ' + m.slice(5) + ', bấm Xem trước rồi Ghi sổ ở mục Lương, BHXH, thuế TNCN.', null, 'tudong');
-    try { if (A.depreciation(m).lines.length && !A.exists(A.tagOf('kh', m))) add('warn', 'T04', 'Thiếu bút toán', 'Tháng ' + mlab(m) + ' có TSCĐ phải khấu hao nhưng chưa ghi bút toán khấu hao.', 'Vào Bút toán tự động, mục Khấu hao TSCĐ, bấm Xem trước rồi Ghi sổ.', null, 'tudong'); } catch (e) { }
-    try { if (A.prepaid(m).lines.length && !A.exists(A.tagOf('pb', m))) add('info', 'T05', 'Thiếu bút toán', 'Tháng ' + mlab(m) + ' có chi phí trả trước cần phân bổ nhưng chưa ghi.', 'Vào Bút toán tự động, mục Phân bổ chi phí chờ phân bổ.', null, 'tudong'); } catch (e) { }
+    if (!J.some(l => !l.tag && ym(l) === m)) return;   // tháng không có nghiệp vụ nhập tay: không nhắc sinh bút toán tự động
+    const manM = (...cs) => J.some(l => !l.tag && ym(l) === m && has(l.co, ...cs));
+    if (hasPay && !A.exists(A.tagOf('bl', m)) && !manM('334')) add('warn', 'T03', 'Thiếu bút toán', 'Tháng ' + mlab(m) + ' có bảng lương nhưng chưa có bút toán lương, bảo hiểm, thuế TNCN.', 'Vào Bút toán tự động, chọn tháng ' + m.slice(5) + ', bấm Xem trước rồi Ghi sổ ở mục Lương, BHXH, thuế TNCN.', null, 'tudong');
+    try { if (!manM('214') && A.depreciation(m).lines.length && !A.exists(A.tagOf('kh', m))) add('warn', 'T04', 'Thiếu bút toán', 'Tháng ' + mlab(m) + ' có TSCĐ phải khấu hao nhưng chưa ghi bút toán khấu hao.', 'Vào Bút toán tự động, mục Khấu hao TSCĐ, bấm Xem trước rồi Ghi sổ.', null, 'tudong'); } catch (e) { }
+    try { if (!manM('242') && A.prepaid(m).lines.length && !A.exists(A.tagOf('pb', m))) add('info', 'T05', 'Thiếu bút toán', 'Tháng ' + mlab(m) + ' có chi phí trả trước cần phân bổ nhưng chưa ghi.', 'Vào Bút toán tự động, mục Phân bổ chi phí chờ phân bổ.', null, 'tudong'); } catch (e) { }
     if (m !== last) { const kc = J.some(l => ym(l) === m && (has(l.no, '911') || has(l.co, '911'))); const act = J.some(l => ym(l) === m && has(l.co, '511') && !l.tag);
       if (act && !kc) add('info', 'T06', 'Thiếu bút toán', 'Tháng ' + mlab(m) + ' có doanh thu nhưng chưa kết chuyển xác định kết quả (911).', 'Cuối kỳ vào Bút toán tự động, mục Kết chuyển xác định kết quả (911). Làm sau khi đã ghi lương, khấu hao, phân bổ.', null, 'tudong'); } });
 
@@ -2177,12 +2189,25 @@ KT.audit = () => {
     const gt = J.some(l => l.tag && l.tag.startsWith('auto-gtgt:') && ym(l) === m);
     if (gt) mm.filter(l => has(l.no, '3331') && has(l.co, '133')).forEach(l => add('warn', 'X07', 'Xung đột', 'Tháng ' + mlab(m) + ': có dòng khấu trừ thuế GTGT nhập tay (Nợ 3331 / Có 133) bên cạnh bút toán khấu trừ tự động.', 'Xóa dòng nhập tay, dùng mục Khấu trừ thuế GTGT ở Bút toán tự động.', l));
   });
+  // 3a0. nhân viên do phần mềm tự tạo khi gán đối tượng (không lương, không CCCD/BHXH) nhưng vẫn được tính lương, bảo hiểm tự động
+  (S.employees || []).forEach(e => { if (e.tapThe || KT.num(e.luongCB) || KT.num(e.luongDongBH) || e.cccd || e.soBHXH || e.mst || e.chucDanh) return;
+    const tg = [...new Set(J.filter(l => l.tag && /^auto-bl:/.test(l.tag)).map(l => l.tag))]; const act = H_ && H_.activeIn ? H_.activeIn : () => true;
+    add('warn', 'X10', 'Xung đột', 'Nhân viên ' + e.code + ' ' + (e.name || '') + ' chưa có lương, CCCD, sổ BHXH (thường do gán đối tượng TK 334/141 tự tạo) nhưng vẫn được tính bảo hiểm, lương tự động theo mức sàn' + (tg.length ? ' (' + tg.length + ' tháng đã sinh bút toán)' : '') + '.', 'Chuyển thành “tập thể” (không tính lương) và sinh lại bút toán lương, kết chuyển; hoặc khai đủ lương, CCCD nếu là nhân viên thật.', null, 'nv'); Object.assign(out[out.length - 1], { emp: e.code }); });
+  // 3a. bút toán tự động trùng với dòng nhập tay (cùng tháng, cùng cặp TK) hoặc nằm ở tháng không có nghiệp vụ nhập tay nào
+  const tags = [...new Set(J.filter(l => l.tag).map(l => l.tag))], dupT = new Set();
+  const KIND = { bl: 'lương, bảo hiểm, thuế TNCN', kh: 'khấu hao', pb: 'phân bổ chi phí trả trước', sx: 'kết chuyển chi phí sản xuất', gtgt: 'khấu trừ thuế GTGT', kc: 'kết chuyển 911', tndn: 'chi phí thuế TNDN' };
+  const pair = l => String(l.no).slice(0, 3) + '/' + String(l.co).slice(0, 3);
+  tags.forEach(tg => { const mt = /^auto-([a-z]+):/.exec(tg); if (!mt || !KIND[mt[1]]) return; const al = J.filter(l => l.tag === tg); if (!al.length) return;
+    const ms = new Set(al.map(ym)), mon = [...ms].filter(Boolean).map(mlab).join(', '), manIn = J.filter(l => !l.tag && ms.has(ym(l))), ps = new Set(al.map(pair)), hit = manIn.filter(l => ps.has(pair(l)));
+    if (hit.length) { dupT.add(tg); add('warn', 'X08', 'Xung đột', 'Bút toán tự động ' + KIND[mt[1]] + ' tháng ' + mon + ' (' + (al[0].ct || '') + ', ' + al.length + ' dòng, ' + f(al.reduce((x, l) => x + KT.num(l.st), 0)) + ') trùng với ' + hit.length + ' dòng nhập tay cùng cặp tài khoản: số liệu đang bị ghi hai lần.', 'Giữ dòng nhập tay và bỏ bút toán tự động, hoặc thay các dòng nhập tay bằng bút toán tự động.', al[0], 'tudong'); Object.assign(out[out.length - 1], { tag: tg, hits: hit.map(l => l.id), kind: mt[1] }); }
+    else if (!manIn.length) { dupT.add(tg); add('warn', 'X09', 'Xung đột', 'Bút toán tự động ' + KIND[mt[1]] + ' tháng ' + mon + ' (' + (al[0].ct || '') + ', ' + al.length + ' dòng) nằm ở tháng không có nghiệp vụ nhập tay nào, có thể sinh nhầm kỳ.', 'Bỏ bút toán tự động này nếu tháng đó doanh nghiệp chưa hoạt động.', al[0], 'tudong'); Object.assign(out[out.length - 1], { tag: tg, kind: mt[1] }); }
+  });
   // 3b. bút toán tự động đã lệch so với dữ liệu gốc (sửa bảng lương, TSCĐ sau khi ghi sổ)
-  const tags = [...new Set(J.filter(l => l.tag).map(l => l.tag))];
-  tags.forEach(tg => { const mt = /^auto-(bl|kh|pb):(\d{4}-\d{2})$/.exec(tg); if (!mt) return; let now;
+  tags.forEach(tg => { const mt = /^auto-(bl|kh|pb):(\d{4}-\d{2})$/.exec(tg); if (!mt || dupT.has(tg)) return; let now;
     try { now = mt[1] === 'bl' ? A.payroll(mt[2]) : mt[1] === 'kh' ? A.depreciation(mt[2]) : A.prepaid(mt[2]); } catch (e) { return; }
     const a = A.lines(tg).reduce((s, l) => s + KT.num(l.st), 0), b = now.lines.reduce((s, l) => s + KT.num(l.st), 0);
     if (Math.abs(a - b) > 1) add('warn', 'X06', 'Xung đột', 'Bút toán tự động ' + ({ bl: 'lương', kh: 'khấu hao', pb: 'phân bổ' })[mt[1]] + ' tháng ' + mlab(mt[2]) + ' đã ghi ' + f(a) + ' nhưng dữ liệu gốc hiện cho ' + f(b) + ' (lệch ' + f(b - a) + ').', 'Dữ liệu gốc (bảng lương, TSCĐ, chi phí trả trước) đã thay đổi sau khi ghi sổ. Vào Bút toán tự động, bấm Xem trước rồi Ghi sổ lại để cập nhật. Phần mềm sẽ thay toàn bộ dòng cũ.', null, 'tudong'); });
+  { const dm = new Set(J.filter(l => dupT.has(l.tag)).map(ym)); for (let k = out.length - 1; k >= 0; k--) if (/^X0[123457]$/.test(out[k].code) && dm.has(String(out[k].date || '').slice(0, 7))) out.splice(k, 1); }   // đã gom vào X08
   const rank = { err: 0, warn: 1, info: 2 };
   return out.sort((x, y) => rank[x.sev] - rank[y.sev] || (x.date < y.date ? -1 : 1));
 };
@@ -2786,7 +2811,7 @@ UI.route('ps', 'Sổ PS – nhập chứng từ', 'Nhập liệu', false, () => 
   }
   let tot = 0; for (const i of idx) tot += KT.num(J[i].st);
   const months = [...new Set(J.map(j => D.ym(D.parse(j.ng) || '')).filter(Boolean))].sort();
-  return dls() + '<div class="ph"><div><h1>Sổ PS</h1><div class="sub">Bảng toàn bộ bút toán, mỗi dòng một cặp Nợ/Có; các dòng cùng số chứng từ và ngày thuộc một chứng từ. Dùng khi cần <b>sửa từng dòng</b>, ghi nghiệp vụ đặc biệt (điều chỉnh, vay, góp vốn…), hoặc <b>dán nhiều dòng từ Excel, sao kê ngân hàng, sổ quỹ</b>. Nhập một hóa đơn hay một phiếu thu chi thì dùng <a href="#" data-a="gonn">Nhập nhanh</a> cho gọn.</div></div><span class="sp"></span><button class="btn" data-a="paste">Dán từ Excel, sao kê</button><button class="btn pri" data-a="tpl">Nhập theo mẫu</button><button class="btn" data-a="psadd">+ Dòng trống</button><button class="btn dng" data-a="clrdata">Xóa dữ liệu…</button></div>' +
+  return dls() + '<div class="ph"><div><h1>Sổ PS</h1><div class="sub">Bảng toàn bộ bút toán, mỗi dòng một cặp Nợ/Có; các dòng cùng số chứng từ và ngày thuộc một chứng từ. Dùng khi cần <b>sửa từng dòng</b>, ghi nghiệp vụ đặc biệt (điều chỉnh, vay, góp vốn…), hoặc <b>dán nhiều dòng từ Excel, sao kê ngân hàng, sổ quỹ</b>. Nhập một hóa đơn hay một phiếu thu chi thì dùng <a href="#" data-a="gonn">Nhập nhanh</a> cho gọn.</div></div><span class="sp"></span><button class="btn" data-a="paste">Dán từ Excel, sao kê</button><button class="btn pri" data-a="tpl">Nhập theo mẫu</button><button class="btn" data-a="psadd">+ Dòng trống</button></div>' +
     '<div class="card" style="padding:10px 12px"><div class="row"><label class="f" style="flex-direction:row;align-items:center;gap:6px">Tháng <select data-c="psfil" data-k="ym"><option value="">Tất cả</option>' + months.map(m => '<option' + (m === f.ym ? ' selected' : '') + ' value="' + m + '">' + m.slice(5) + '/' + m.slice(0, 4) + '</option>').join('') + '</select></label><input id="psq" type="search" placeholder="Tìm số CT, diễn giải, TK, đối tượng…" value="' + E(f.q) + '" data-i="psq" style="min-width:230px"><select data-c="psfil" data-k="only"><option value="">Tất cả dòng</option><option value="manual"' + (f.only === 'manual' ? ' selected' : '') + '>Chỉ dòng nhập tay</option><option value="auto"' + (f.only === 'auto' ? ' selected' : '') + '>Chỉ dòng tự sinh</option><option value="issue"' + (f.only === 'issue' ? ' selected' : '') + '>Chỉ dòng có vấn đề</option></select><label class="row small muted" style="gap:4px"><input type="checkbox" data-c="psfil" data-k="tax"' + (f.tax !== false ? ' checked' : '') + '> Cột hóa đơn/thuế</label><label class="row small muted" style="gap:4px"><input type="checkbox" data-c="psfil" data-k="more"' + (f.more ? ' checked' : '') + '> Cột LCTT, TNDN</label><span class="sp" style="flex:1"></span><span class="muted small" id="pstot">' + idx.length + ' dòng · tổng tiền ' + KT.f(tot) + '</span><button class="btn sm" data-a="psxls">Xuất Excel</button></div></div>' +
     '<div class="card flat"><div class="tw" style="max-height:calc(100vh - 290px)"><table class="t ps"><thead><tr><th></th>' + cols.map(c => '<th class="' + (c.ty === 'n' || c.ty === 'q' ? 'r' : '') + '">' + E(c.t) + '</th>').join('') + '<th></th></tr></thead><tbody id="psb">' + (h || '<tr><td colspan="' + (cols.length + 2) + '" style="padding:22px;text-align:center" class="muted">Chưa có dòng nào khớp. Bấm “Nhập theo mẫu” để ghi chứng từ đầu tiên.</td></tr>') + '</tbody></table></div></div>' +
     (np > 1 ? '<div class="row" style="justify-content:center"><button class="btn sm" data-a="pspg" data-d="-1"' + (f.page <= 0 ? ' disabled' : '') + '>‹ Trước</button><span class="muted">Trang ' + (f.page + 1) + '/' + np + '</span><button class="btn sm" data-a="pspg" data-d="1"' + (f.page >= np - 1 ? ' disabled' : '') + '>Sau ›</button></div>' : '') +
@@ -2890,7 +2915,7 @@ UI.act.wzsave = el => {
 const auditCard = () => {
   const au = KT.audit(), g = UI.sub.chkg || '', GR = ['Định khoản', 'Thiếu bút toán', 'Xung đột'], sh = g ? au.filter(x => x.group === g) : au;
   const tabs = '<div class="tabs"><button class="' + (!g ? 'on' : '') + '" data-a="chkg" data-g="">Tất cả (' + au.length + ')</button>' + GR.map(x => '<button class="' + (g === x ? 'on' : '') + '" data-a="chkg" data-g="' + x + '">' + x + ' (' + au.filter(y => y.group === x).length + ')</button>').join('') + '</div>';
-  const row = i => '<tr><td><span class="pill ' + (i.sev === 'warn' ? 'warn' : 'info') + '">' + i.code + '</span></td><td>' + E(i.msg) + '<div class="faint small">' + (i.date ? D.fmt(i.date) : '') + (i.ct ? ' · ' + E(i.ct) : '') + '</div></td><td class="small">' + E(i.fix) + '</td><td class="nw">' + (i.id ? '<button class="btn sm" data-a="chkgo" data-id="' + E(i.id) + '" data-ct="' + E(i.ct) + '">Mở dòng</button>' : i.go ? '<button class="btn sm" data-a="auditgo" data-go="' + i.go + '">' + (i.go === 'tudong' ? 'Mở Bút toán tự động' : 'Mở Sổ PS') + '</button>' : '') + '</td></tr>';
+  const row = i => '<tr><td><span class="pill ' + (i.sev === 'warn' ? 'warn' : 'info') + '">' + i.code + '</span></td><td>' + E(i.msg) + '<div class="faint small">' + (i.date ? D.fmt(i.date) : '') + (i.ct ? ' · ' + E(i.ct) : '') + '</div>' + (KT.fix ? KT.fix.html(i) : '') + '</td><td class="small">' + E(i.fix) + '</td><td class="nw">' + (i.id ? '<button class="btn sm" data-a="chkgo" data-id="' + E(i.id) + '" data-ct="' + E(i.ct) + '">Mở dòng</button>' : i.go ? '<button class="btn sm" data-a="auditgo" data-go="' + i.go + '">' + (i.go === 'tudong' ? 'Mở Bút toán tự động' : 'Mở Sổ PS') + '</button>' : '') + '</td></tr>';
   return '<div class="card"><h2>Soát định khoản và bút toán</h2><p class="muted small">Phát hiện định khoản bất thường, thiếu bút toán đi kèm (giá vốn, thuế, lương, khấu hao, kết chuyển) và dòng nhập tay trùng với bút toán tự động của phần mềm. Đây là gợi ý nghiệp vụ, hãy kiểm tra chứng từ gốc trước khi sửa.</p>' + tabs +
     (sh.length ? '<div class="tw" style="margin-top:8px"><table class="t"><thead><tr><th>Mã</th><th>Vấn đề</th><th>Cách xử lý</th><th></th></tr></thead><tbody>' + sh.slice(0, 300).map(row).join('') + '</tbody></table></div>' + (sh.length > 300 ? '<div class="muted small" style="padding:8px">…và ' + (sh.length - 300) + ' mục khác</div>' : '') : '<div class="notice ok" style="margin-top:8px">Không phát hiện định khoản bất thường, thiếu bút toán hay trùng với bút toán tự động.</div>') + '</div>';
 };
@@ -2901,8 +2926,8 @@ UI.route('chk', 'Kiểm tra dữ liệu', 'Nhập liệu', false, () => {
   const f = UI.sub.chk || ''; const sh = f ? iss.filter(i => i.sev === f) : iss; const cnt = s => iss.filter(i => i.sev === s).length;
   return '<div class="ph"><div><h1>Kiểm tra dữ liệu PS</h1><div class="sub">Hệ thống soát lỗi nhập liệu và lỗi nguyên lý kế toán trên toàn bộ sổ.</div></div></div>' +
     '<div class="tabs"><button class="' + (!f ? 'on' : '') + '" data-a="chkf" data-f="">Tất cả (' + iss.length + ')</button><button class="' + (f === 'err' ? 'on' : '') + '" data-a="chkf" data-f="err">Lỗi (' + cnt('err') + ')</button><button class="' + (f === 'warn' ? 'on' : '') + '" data-a="chkf" data-f="warn">Cảnh báo (' + cnt('warn') + ')</button><button class="' + (f === 'info' ? 'on' : '') + '" data-a="chkf" data-f="info">Gợi ý (' + cnt('info') + ')</button></div>' +
-    (KT.fix ? KT.fix.bar() : '') + '<div class="card flat">' + (sh.length ? sh.slice(0, 400).map(i => '<div class="sev"><span class="pill ' + (i.sev === 'err' ? 'bad' : i.sev === 'warn' ? 'warn' : 'info') + '">' + i.code + '</span><div class="m">' + E(i.msg) + '<div class="faint small">' + (i.date ? D.fmt(i.date) : '') + (i.ct ? ' · ' + E(i.ct) : '') + '</div>' + (KT.fix ? KT.fix.html(i) : '') + '</div>' + (i.id ? '<button class="btn sm" data-a="chkgo" data-id="' + E(i.id) + '" data-ct="' + E(i.ct) + '">Mở dòng</button>' : '') + '</div>').join('') + (sh.length > 400 ? '<div style="padding:10px" class="muted">…và ' + (sh.length - 400) + ' mục khác</div>' : '') : '<div style="padding:22px;text-align:center" class="muted">Không có mục nào.</div>') + '</div>' +
-    '<div class="card"><div class="row"><div style="flex:1"><h2>Bổ sung tự động</h2><div class="muted small">Tìm bút toán còn thiếu hoặc sai (kết chuyển 911, thuế GTGT, bút toán tự động chưa sinh) và số dư đầu kỳ còn thiếu. Xem trước, tick chọn rồi mới ghi; hoàn tác được.</div></div><button class="btn pri" data-a="fillmiss">Gợi ý bổ sung bút toán thiếu</button><button class="btn dng" data-a="clrdata">Xóa dữ liệu…</button><button class="btn" data-a="filldk">Gợi ý số dư đầu kỳ</button></div></div>' +
+    (KT.fix ? KT.fix.bar() : '') + '<div class="card flat">' + (sh.length ? sh.slice(0, 400).map(i => '<div class="sev">' + (i.id ? '<input type="checkbox" data-c="fxsel" data-id="' + E(i.id) + '"' + (UI.fx && UI.fx.sel[i.id] ? ' checked' : '') + ' title="Chọn dòng này để xóa" style="margin:4px 8px 0 0">' : '') + '<span class="pill ' + (i.sev === 'err' ? 'bad' : i.sev === 'warn' ? 'warn' : 'info') + '">' + i.code + '</span><div class="m">' + E(i.msg) + '<div class="faint small">' + (i.date ? D.fmt(i.date) : '') + (i.ct ? ' · ' + E(i.ct) : '') + '</div>' + (KT.fix ? KT.fix.html(i) : '') + '</div>' + (i.id ? '<span style="display:flex;gap:6px"><button class="btn sm" data-a="chkgo" data-id="' + E(i.id) + '" data-ct="' + E(i.ct) + '">Mở dòng</button><button class="btn sm dng" data-a="fxdel1" data-id="' + E(i.id) + '" title="Xóa dòng bút toán này">Xóa dòng</button></span>' : '') + '</div>').join('') + (sh.length > 400 ? '<div style="padding:10px" class="muted">…và ' + (sh.length - 400) + ' mục khác</div>' : '') : '<div style="padding:22px;text-align:center" class="muted">Không có mục nào.</div>') + '</div>' +
+    '<div class="card"><div class="row"><div style="flex:1"><h2>Bổ sung tự động</h2><div class="muted small">Tìm bút toán còn thiếu hoặc sai (kết chuyển 911, thuế GTGT, bút toán tự động chưa sinh) và số dư đầu kỳ còn thiếu. Xem trước, tick chọn rồi mới ghi; hoàn tác được.</div></div><button class="btn pri" data-a="fillmiss">Gợi ý bổ sung bút toán thiếu</button><button class="btn" data-a="filldk">Gợi ý số dư đầu kỳ</button></div></div>' +
     auditCard() +
     '<div class="card"><h2>Các kiểm tra đang chạy</h2><p class="muted small">D01–D11 định khoản bất thường · T01–T06 thiếu bút toán (giá vốn, thuế GTGT, lương, khấu hao, phân bổ, kết chuyển) · X01–X07 trùng hoặc lệch với bút toán tự động · E01 Nợ/Có thiếu hoặc tài khoản không tồn tại · E02 số tiền ≤ 0 · E03 ngày sai · E04 thiếu đối tượng khi TK theo dõi công nợ · E05 thiếu mã hàng khi TK kho · E06 quỹ tiền mặt/tiền gửi âm · E08 tồn kho âm · E10 mã đối tượng không có trong danh mục · W07 số dư tiền âm theo ngày · W13 chi tiền mặt ≥ 5 triệu · W14 thuế ≠ giá trị × thuế suất · W15 trùng số chứng từ khác ngày · W16 số dư bất thường · W17–W21 hóa đơn, thuế suất 8%, trùng hóa đơn đầu vào, thiếu MST.</p></div>';
 });
@@ -3066,7 +3091,7 @@ UI.route('ht', 'Công ty & hệ thống', 'Hệ thống', false, () => {
       '<div class="form" style="margin-top:12px"><label class="f"><span>Giảm thuế GTGT 8%: từ ngày</span><input data-c="lgd" data-p="gtgt.giam2.from" value="' + D.fmt(lg.gtgt.giam2.from) + '"></label><label class="f"><span>đến ngày</span><input data-c="lgd" data-p="gtgt.giam2.to" value="' + D.fmt(lg.gtgt.giam2.to) + '"></label></div><div class="row" style="margin-top:10px"><button class="btn" data-a="lgreset">Khôi phục toàn bộ tham số về mặc định</button></div></div>';
   } else if (tab === 'dulieu') {
     body = '<div class="card"><h2>Khóa sổ</h2><div class="row"><label class="f"><span>Khóa đến ngày</span><input data-c="lock" id="lockd" value="' + D.fmt(S().lockedUntil) + '" placeholder="dd/mm/yyyy" size="12"></label><span class="muted small" style="flex:1;min-width:240px">Dòng PS có ngày không sau ngày khóa thì không sửa, không xóa được. Khóa sau khi đã nộp tờ khai và chốt báo cáo. Mở khóa bằng cách xóa ô này.</span></div></div>' +
-      '<div class="card"><h2>Sao lưu và dữ liệu</h2><div class="notice ' + (si.mode === 'memory' ? 'warn ' : '') + 'small">' + (si.mode === 'db' ? 'Dữ liệu lưu trên cơ sở dữ liệu chung, mọi người được cấp quyền cùng thấy và cùng nhập. Vai trò của bạn: <b>' + E(KT.roleName()) + '</b>. Vẫn nên sao lưu file định kỳ.' : 'Dữ liệu lưu trong trình duyệt này (' + (si.mode === 'indexeddb' ? 'IndexedDB' : si.mode === 'localstorage' ? 'localStorage' : 'chỉ bộ nhớ tạm, sẽ mất khi đóng trang') + '). Xóa dữ liệu trình duyệt hoặc đổi máy mà chưa sao lưu sẽ mất dữ liệu.') + '</div><div class="row" style="margin-top:10px"><button class="btn pri" data-a="backup">Xuất file sao lưu (.json)</button><button class="btn" data-a="restore">Khôi phục từ file</button><button class="btn" data-a="demo">Nạp dữ liệu mẫu</button><button class="btn dng" data-a="wipe">Xóa toàn bộ, bắt đầu trống</button></div><p class="muted small" style="margin-top:8px">Hiện có ' + S().journal.length + ' dòng PS, ' + S().partners.length + ' đối tượng, ' + S().items.length + ' mã hàng, ' + S().employees.length + ' nhân viên.</p><div id="snaps"></div></div>';
+      '<div class="card"><h2>Sao lưu và dữ liệu</h2><div class="notice ' + (si.mode === 'memory' ? 'warn ' : '') + 'small">' + (si.mode === 'db' ? 'Dữ liệu lưu trên cơ sở dữ liệu chung, mọi người được cấp quyền cùng thấy và cùng nhập. Vai trò của bạn: <b>' + E(KT.roleName()) + '</b>. Vẫn nên sao lưu file định kỳ.' : 'Dữ liệu lưu trong trình duyệt này (' + (si.mode === 'indexeddb' ? 'IndexedDB' : si.mode === 'localstorage' ? 'localStorage' : 'chỉ bộ nhớ tạm, sẽ mất khi đóng trang') + '). Xóa dữ liệu trình duyệt hoặc đổi máy mà chưa sao lưu sẽ mất dữ liệu.') + '</div><div class="row" style="margin-top:10px"><button class="btn pri" data-a="backup">Xuất file sao lưu (.json)</button><button class="btn" data-a="restore">Khôi phục từ file</button><button class="btn" data-a="demo">Nạp dữ liệu mẫu</button><button class="btn dng" data-a="clrdata">Xóa dữ liệu…</button></div><p class="muted small" style="margin-top:8px">Hiện có ' + S().journal.length + ' dòng PS, ' + S().partners.length + ' đối tượng, ' + S().items.length + ' mã hàng, ' + S().employees.length + ' nhân viên.</p><div id="snaps"></div></div>';
   } else {
     body = '<div class="card"><h2>Giới hạn cần biết</h2><ul class="muted small" style="margin:0;padding-left:18px;display:grid;gap:5px"><li>Chỉ hạch toán đồng Việt Nam, chưa có ngoại tệ và chênh lệch tỷ giá.</li><li>Tờ khai: phần mềm tính số liệu từng chỉ tiêu và điền vào file XML xuất từ HTKK; chưa tạo XML từ đầu theo lược đồ chính thức, chưa có 01/KHBS. Cần đối chiếu mã chỉ tiêu với mẫu hiện hành (Thông tư 89/2026/TT-BTC) trước khi nộp.</li><li>Mã số các dòng B01, B02, B03 theo mẫu của file Excel cũ; đối chiếu với phụ lục Thông tư 99/2025/TT-BTC.</li><li>Thuyết minh B09 chỉ tạo các bảng số liệu, phần diễn giải do kế toán bổ sung.</li><li>Một máy, một người dùng; chưa có đăng nhập và phân quyền.</li><li>Chưa có: giá bán lẻ, chi phí chuẩn, doanh thu xây dựng theo tiến độ, thuế hoãn lại, hợp nhất.</li></ul></div>';
   }
@@ -3259,22 +3284,32 @@ UI.route('tncn', 'Thuế TNCN (05/KK, 05/QTT)', 'Thuế', false, () => {
 });
 
 /* ====================== BÚT TOÁN TỰ ĐỘNG ====================== */
-const GENS = () => {
+// bỏ những dòng tự sinh mà tháng đó đã nhập tay cùng cặp tài khoản (tránh ghi hai lần khi đã tự nhập đủ)
+const dedupMan = r => { if (!r || !r.lines) return r; const pr = l => String(l.no).slice(0, 3) + '/' + String(l.co).slice(0, 3) + '|' + String(l.ng || '').slice(0, 7);
+  const have = new Set(S().journal.filter(l => !l.tag).map(pr)); const keep = r.lines.filter(l => !have.has(pr(l))); return Object.assign({}, r, { lines: keep, skipped: r.lines.length - keep.length }); };
+const GENS = () => GENS0().map(g => /^(pay|dep|pre|prod)$/.test(g.id) ? Object.assign({}, g, { run: () => dedupMan(g.run()) }) : g);
+const GENS0 = () => {
   const p = UI.P(); const ym = p.to.slice(0, 7); const y = +p.to.slice(0, 4); const vk = T.periods(S().company.kyGTGT, D.bom(ym), D.eom(ym))[0].key; const vp = T.periods(S().company.kyGTGT, D.bom(ym), D.eom(ym))[0];
   return [
     { id: 'pay', t: 'Lương, BHXH, thuế TNCN', d: 'Tính từ bảng lương và danh sách nhân viên: chi phí lương, BHXH 17,5%, BHYT 3%, BHTN 1%, KPCĐ 2%, các khoản trừ vào lương, thuế TNCN.', tag: A.tagOf('bl', ym), run: () => A.payroll(ym), lbl: 'tháng ' + ym.slice(5) },
     { id: 'dep', t: 'Khấu hao TSCĐ', d: 'Khấu hao đường thẳng theo danh mục TSCĐ, từ tháng kế tiếp tháng đưa vào sử dụng.', tag: A.tagOf('kh', ym), run: () => A.depreciation(ym) },
     { id: 'pre', t: 'Phân bổ chi phí chờ phân bổ', d: 'Phân bổ đều chi phí trả trước (242) theo số tháng khai báo.', tag: A.tagOf('pb', ym), run: () => A.prepaid(ym) },
-    { id: 'prod', t: 'Kết chuyển chi phí sản xuất (154)', d: 'Gom 621, 622, 627 phát sinh trong tháng vào giá thành theo đơn hàng loại Sản xuất.', tag: A.tagOf('sx', ym), run: () => A.production(ym) },
+    { id: 'prod', t: 'Kết chuyển chi phí sản xuất (154)', d: 'Gom 621, 622, 627 phát sinh trong tháng vào giá thành theo đơn hàng loại Sản xuất. Không có đơn hàng sản xuất (khách sạn, nhà hàng, dịch vụ) thì gom vào 154 rồi kết chuyển giá vốn 632.', tag: A.tagOf('sx', ym), run: () => A.production(ym) },
     { id: 'vat', t: 'Khấu trừ thuế GTGT ' + vp.label, d: 'Nợ 3331 / Có 133 theo số được khấu trừ của kỳ khai.', tag: A.tagOf('gtgt', vk), run: () => A.vatOffset(vk) },
-    { id: 'close', t: 'Kết chuyển xác định kết quả (911) – ' + p.label, d: 'Kết chuyển doanh thu, chi phí vào 911 và lãi/lỗ vào 421. Làm sau cùng, sau khi đã sinh các bút toán khác.', tag: A.tagOf('kc', p.from + '_' + p.to), run: () => A.closing(p.from, p.to, p.label.toLowerCase()) },
+    { id: 'close', t: 'Kết chuyển xác định kết quả (911) – ' + p.label, d: 'Kết chuyển doanh thu, chi phí vào 911 và lãi/lỗ vào 421. Phần đã kết chuyển (nhập tay hoặc kỳ khác) được trừ ra, chỉ kết chuyển phần còn lại nên không chồng bút toán. Làm sau cùng, sau khi đã sinh các bút toán khác.', tag: A.tagOf('kc', p.from + '_' + p.to), run: () => A.closing(p.from, p.to, p.label.toLowerCase()) },
     { id: 'cit', t: 'Chi phí thuế TNDN năm ' + y, d: 'Nợ 8211 / Có 3334 theo số thuế TNDN quyết toán của năm.', tag: A.tagOf('tndn', String(y)), run: () => A.citExpense(y) }
   ];
 };
+UI.act.tdper = el => { const m = el.dataset.m, y = +m.slice(0, 4), mo = +m.slice(5); UI.per = { k: 'month', y, m: mo, q: Math.ceil(mo / 3), from: m.slice(0, 4) + '-01-01', to: D.eom(m) }; UI.render(); };
+const tdPick = p => { const J = S().journal, ms = [...new Set(J.filter(l => !l.tag).map(l => String(D.parse(l.ng) || '').slice(0, 7)).filter(Boolean))].sort(); if (!ms.length) return '';
+  const cur = p.to.slice(0, 7), has = J.some(l => !l.tag && String(D.parse(l.ng) || '').slice(0, 7) === cur && p.from.slice(0, 7) === cur);
+  const st = m => J.some(l => String(D.parse(l.ng) || '').slice(0, 7) === m && (String(l.no).startsWith('911') || String(l.co).startsWith('911')));
+  return '<div class="card" style="padding:10px 14px"><div class="row" style="gap:6px;flex-wrap:wrap;align-items:center"><b class="small">Chọn tháng có dữ liệu:</b>' + ms.slice(-12).map(m => '<button class="btn sm' + (m === cur && p.from.slice(0, 7) === cur ? ' pri' : '') + '" data-a="tdper" data-m="' + m + '" title="' + (st(m) ? 'Đã kết chuyển' : 'Chưa kết chuyển') + '">' + m.slice(5) + '/' + m.slice(0, 4) + (st(m) ? ' ✓' : '') + '</button>').join('') + '</div>' +
+    (has ? '' : '<div class="notice warn small" style="margin-top:8px">Kỳ đang chọn (' + E(p.label) + ') không có nghiệp vụ nhập tay nào, nên bút toán tự động sẽ trống hoặc sinh nhầm kỳ. Bấm một tháng ở trên để chọn đúng kỳ cần chốt.</div>') + '</div>'; };
 UI.route('tudong', 'Bút toán tự động', 'Nhập liệu', true, () => {
   const gs = GENS(); const p = UI.P();
   return '<div class="ph"><div><h1>Bút toán tự động cuối kỳ</h1><div class="sub">Chọn kỳ ở thanh trên (tháng nên chọn tháng cần chốt). Bút toán sinh ra nằm trong sổ PS với nền xám, sinh lại bao nhiêu lần cũng thay thế bản cũ.</div></div><span class="sp"></span><button class="btn pri" data-a="genall">Chạy tuần tự các bút toán của tháng</button></div>' +
-    '<div class="grid g2">' + gs.map(g => { const n = A.lines(g.tag).length; return '<div class="card"><div class="row"><h2 style="flex:1">' + E(g.t) + '</h2><span class="pill ' + (n ? 'ok' : '') + '">' + (n ? 'Đã sinh ' + n + ' dòng' : 'Chưa sinh') + '</span></div><p class="muted small">' + E(g.d) + '</p><button class="btn" data-a="gen" data-id="' + g.id + '">Xem trước và áp dụng</button></div>'; }).join('') + '</div>';
+    tdPick(p) + '<div class="grid g2">' + gs.map(g => { const n = A.lines(g.tag).length; return '<div class="card"><div class="row"><h2 style="flex:1">' + E(g.t) + '</h2><span class="pill ' + (n ? 'ok' : '') + '">' + (n ? 'Đã sinh ' + n + ' dòng' : 'Chưa sinh') + '</span></div><p class="muted small">' + E(g.d) + '</p><button class="btn" data-a="gen" data-id="' + g.id + '">Xem trước và áp dụng</button></div>'; }).join('') + '</div>';
 });
 UI.act.gen = el => { const g = GENS().find(x => x.id === el.dataset.id); const r = g.run(); r.title = g.t; UI.autoPrev(r); };
 UI.act.genall = () => UI.ask('Sinh lần lượt: lương, khấu hao, phân bổ, giá thành, khấu trừ GTGT, kết chuyển 911 cho kỳ đang chọn. Các bút toán cũ cùng kỳ sẽ được thay thế.', 'Chạy', () => {
@@ -4317,7 +4352,7 @@ fill.missing = () => {
     const exLines = L.lines.filter(l => ymOf(l) === m && (l.close || (l.no === '511' && l.co === '521')));
     if (!exLines.length) return;                                       // chưa kết chuyển: xem mục T06
     if (exLines.some(l => l.tag && l.tag.startsWith('auto-kc:'))) return; // đã có bút toán tự động: dùng mục Bút toán tự động
-    const cl = A.closing(D.bom(m), D.eom(m), 'tháng ' + m.slice(5)); const used = new Set(); let nxt = null;
+    const cl = A.closing(D.bom(m), D.eom(m), 'tháng ' + m.slice(5), { gross: true }); const used = new Set(); let nxt = null;
     cl.lines.forEach(e => {
       const k = key(e.no, e.co), ex = exLines.filter(l => key(l.no, l.co) === k); used.add(k);
       const sum = ex.reduce((s, l) => s + l.st, 0);
@@ -4379,7 +4414,7 @@ UI.act.fmsgo = () => {
 (function (G) {
 'use strict';
 const KT = G.KT, UI = KT.ui, D = KT.d, E = KT.esc, $ = UI.$, S = () => KT.S, num = KT.num, f = KT.f;
-const fix = KT.fix = {}; const fx = UI.fx = { vals: {}, skip: {} };
+const fix = KT.fix = {}; const fx = UI.fx = { vals: {}, skip: {}, sel: {}, whole: false };
 const nz = s => KT.imp.norm(s);
 const TYPES = [['KH', 'Khách hàng'], ['NCC', 'Nhà cung cấp'], ['CSH', 'Chủ sở hữu / cổ đông'], ['KHAC', 'Khác'], ['NV', 'Nhân viên']];
 const STOP = ['chưa thanh toán', 'chưa thu tiền', 'tiền chuyển khoản', 'bằng tiền mặt', 'bán hàng', 'mua hàng', 'thu tiền', 'trả tiền', 'thanh toán', 'công nợ', 'đặt phòng', 'lưu trú', 'nhà cung cấp', 'khách hàng', 'chuyển khoản', 'tiền mặt', 'góp vốn', 'tạm ứng', 'ứng trước', 'trả lại', 'hóa đơn', 'khách', 'cọc', 'vốn', 'tiền'];
@@ -4393,14 +4428,15 @@ fix.matchPartner = dg => { const nd = ' ' + nz(dg) + ' '; let best = null; allP(
 const tyOf = a => /^131/.test(a) ? 'KH' : /^331/.test(a) ? 'NCC' : /^411/.test(a) ? 'CSH' : /^(141|334)/.test(a) ? 'NV' : 'KHAC';
 const createPartner = (code, name, type) => {
   if (hasCode(code)) return;
+  if (type === 'NV' && code === 'TAPTHE') { S().employees.push({ code, name: name || 'Tập thể người lao động', tapThe: true, chucDanh: '', cccd: '', mst: '', soBHXH: '', vao: '1900-01-01', nghi: '1900-01-01', luongCB: 0, phuCap: 0, anTrua: 0, luongDongBH: 0, tkChiPhi: '642', thueKieu: 'khongkhautru', thamGiaBH: false, npt: [] }); return; }
   if (type === 'NV') S().employees.push({ code, name: name || code, chucDanh: '', cccd: '', mst: '', soBHXH: '', vao: D.today(), luongCB: 0, phuCap: 0, anTrua: 0, luongDongBH: 0, tkChiPhi: '642', thueKieu: 'luytien', npt: [] });
   else S().partners.push({ code, name: name || code, type: type || 'KHAC', mst: '', address: '', phone: '', lienHe: '', email: '', stk: '', nganHang: '', dieuKhoan: 0, hanMuc: 0, nhom: '' });
 };
 const ctx = () => {
   if (fix._c && fix._c.ver === KT.version) return fix._c;
   const L = KT.compute(), J = new Map(S().journal.map(j => [j.id, j])), N = new Map(L.all.map(l => [l.id, l])), miss = new Map();
-  try { fill_edits().forEach(e => miss.set(e.id, e)); } catch (e) { }
-  return fix._c = { ver: KT.version, L, J, N, miss };
+  let adds = []; try { const o = KT.fill.missing().out; o.filter(e => e.type === 'edit').forEach(e => miss.set(e.id, e)); adds = o.filter(e => e.type === 'add' && e.grp === 'Thuế GTGT còn thiếu'); } catch (e) { }
+  return fix._c = { ver: KT.version, L, J, N, miss, adds };
 };
 const fill_edits = () => KT.fill.missing().out.filter(e => e.type === 'edit');
 
@@ -4414,8 +4450,10 @@ fix.propose = i => {
   } else if (i.code === 'W12' && i.dh) {
     p = { key: 'O|' + i.dh, desc: 'Tạo đơn hàng “' + i.dh + '” trong danh mục', fields: [{ k: 'name', label: 'Tên', value: i.dh, w: 160 }, { k: 'loai', label: 'Loại', ty: 'sel', opts: [['SX', 'Sản xuất'], ['BH', 'Bán hàng'], ['DV', 'Dịch vụ'], ['XD', 'Công trình']], value: 'SX' }], apply: v => { if (!S().orders.some(x => x.code === i.dh)) S().orders.push({ code: i.dh, name: v.name || i.dh, loai: v.loai || 'SX' }); return ''; } };
   } else if (i.code === 'W09' && nl && j) {
-    const m = fix.matchPartner(nl.dg), nm = m ? m.name : fix.guessName(nl.dg);
-    p = { key: 'D|' + i.id + '|' + i.side, desc: 'Gán đối tượng cho TK ' + i.acc + ' (' + i.side + ')' + (m ? ' theo tên trong diễn giải' : ', đoán từ diễn giải'), fields: [{ k: 'dt', label: 'Mã đối tượng', value: m ? m.code : fix.codeFrom(nm, 'DT'), list: 'fx-pt', w: 100 }, { k: 'name', label: 'Tên (nếu tạo mới)', value: nm, w: 170 }, { k: 'type', label: 'Loại', ty: 'sel', opts: TYPES, value: tyOf(i.acc) }],
+    const sb = S().journal.find(x => x !== j && j.ct && x.ct === j.ct && (x.dt || x.dn || x.dc) && hasCode(x.dt || x.dn || x.dc)), sbc = sb ? (sb.dt || sb.dn || sb.dc) : '';
+    const m0 = sbc ? allP().find(x => x.code === sbc) : fix.matchPartner(nl.dg), isNV = tyOf(i.acc) === 'NV' && !(m0 && S().employees.includes(m0));
+    const m = isNV ? (S().employees.find(x => x.code === 'TAPTHE') || null) : m0, nm = m ? m.name : isNV ? 'Tập thể người lao động' : fix.guessName(nl.dg);
+    p = { key: 'D|' + i.id + '|' + i.side, desc: 'Gán đối tượng cho TK ' + i.acc + ' (' + i.side + ')' + (isNV ? ': chưa nhận ra nhân viên cụ thể nên gán cho “Tập thể người lao động” (không tính lương, không sinh bút toán lương); muốn chi tiết thì đổi sang mã nhân viên có sẵn' : sbc ? ' theo dòng cùng chứng từ' : m ? ' theo tên trong diễn giải' : ', đoán từ diễn giải (sẽ tạo đối tượng mới, sửa mã/tên nếu cần)'), fields: [{ k: 'dt', label: 'Mã đối tượng', value: m ? m.code : isNV ? 'TAPTHE' : fix.codeFrom(nm, 'DT'), list: 'fx-pt', w: 100 }, { k: 'name', label: 'Tên (nếu tạo mới)', value: nm, w: 170 }, { k: 'type', label: 'Loại', ty: 'sel', opts: TYPES, value: tyOf(i.acc) }],
       apply: v => { const code = (v.dt || '').trim(); if (!code) return 'Chưa có mã đối tượng'; createPartner(code, v.name, v.type); const both = KT.acc.flag(nl.no, 'p') && KT.acc.flag(nl.co, 'p'); if (both) { j.dn = i.side === 'Nợ' ? code : (nl.dn || ''); j.dc = i.side === 'Có' ? code : (nl.dc || ''); } else j.dt = code; return ''; } };
   } else if (i.code === 'E01' && i.acc && j) {
     let g = ''; for (let n = String(i.acc).length - 1; n >= 3; n--) if (KT.acc.has(i.acc.slice(0, n))) { g = i.acc.slice(0, n); break; }
@@ -4427,23 +4465,109 @@ fix.propose = i => {
     const e = c.miss.get(i.id); p = { key: 'M|' + i.id, desc: 'Kết chuyển chưa có số tiền; theo phát sinh thực tế của tháng là ' + e.now.no + '/' + e.now.co, fields: [{ k: 'amt', label: 'Số tiền', value: f(e.now.st), w: 120 }], apply: v => { j.no = e.now.no; j.co = e.now.co; j.st = KT.rnd(num(v.amt)); return ''; } };
   } else if (i.code === 'W14' && j && i.exp) {
     p = { key: 'T|' + i.id, desc: 'Số thuế khác giá trị chưa thuế × thuế suất; đề xuất sửa theo công thức', fields: [{ k: 'amt', label: 'Số thuế', value: f(i.exp), w: 110 }], apply: v => { j.st = KT.rnd(num(v.amt)); return ''; } };
+  } else if (i.code === 'W10' && j && nl) {
+    const na = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const dgn = ' ' + na(nl.dg) + ' ', tkw = /^15\d/.test(nl.no) ? nl.no.slice(0, 3) : nl.co.slice(0, 3);
+    const its = S().items.filter(x => x.code); const hit = its.filter(x => dgn.includes(' ' + na(x.code) + ' ') || (na(x.name).length > 2 && dgn.includes(' ' + na(x.name) + ' ')));
+    const it = hit.find(x => x.tk === tkw) || hit[0] || its.find(x => x.tk === tkw && its.filter(y => y.tk === tkw).length === 1) || null;
+    const q = it && +it.giaMua > 0 ? KT.rnd(nl.amt / it.giaMua * 100) / 100 : 1;
+    const pf = { 152: 'NVL', 153: 'CCDC', 155: 'SP', 156: 'HH' }[tkw] || 'HH'; let nc = pf + '01', nn = 1; while (S().items.some(x => x.code === nc)) nc = pf + String(++nn).padStart(2, '0');
+    p = { key: 'W|' + i.id, desc: 'Bút toán kho TK ' + tkw + ' thiếu mã hàng / số lượng' + (it ? '; đoán mã “' + it.code + '” theo diễn giải' : '; chưa đoán được mã hàng nên điền mẫu mã mới “' + nc + '” (sẽ tạo trong danh mục, bạn sửa mã/tên nếu cần)') + (it && q !== 1 ? ', số lượng ước tính theo giá mua' : ', số lượng mẫu = 1, bạn sửa nếu khác'), fields: [{ k: 'vt', label: 'Mã hàng', value: j.vt || (it ? it.code : nc), list: 'fx-it', w: 110 }, { k: 'sl', label: 'Số lượng', value: j.sl ? String(j.sl) : String(q), w: 80 }, ...(it ? [] : [{ k: 'name', label: 'Tên hàng', value: (nl.dg || nc).slice(0, 60), w: 160 }])],
+      apply: v => { const code = (v.vt || '').trim(), sl = num(v.sl); if (!code) return 'Chưa có mã hàng'; if (!(sl > 0)) return 'Chưa có số lượng'; if (!S().items.some(x => x.code === code)) S().items.push({ code, name: (v.name || code), unit: '', tk: tkw, loai: { 152: 'NVL', 153: 'CCDC', 155: 'TP', 156: 'HH' }[tkw] || 'HH', nhom: '', tkDT: '5111', thue: '10', giaMua: 0, giaBan: 0, tonMin: 0 }); j.vt = code; j.sl = sl; return ''; } };
+  } else if (i.code === 'W13' && i.ct) {
+    const ids = c.L.lines.filter(l => l.vk === i.ct && l.date === i.date).map(l => l.id);
+    p = { key: 'C|' + i.ct + '|' + i.date, desc: 'Chi tiền mặt ≥ ngưỡng: đổi TK Có 111 thành 112 nếu thực tế đã chuyển khoản; chọn “Được trừ” nếu thuộc diện ngoại lệ' + (c.L.bal('112', i.date) > 0 ? '' : ' (ngân hàng chưa có số dư nên chưa điền sẵn)'), fields: [{ k: 'act', label: 'Cách xử lý', ty: 'sel', opts: [['', 'Chọn cách xử lý…'], ['tk', 'Đổi 111 → 112'], ['ok', 'Gắn nhãn Được trừ']], value: c.L.bal('112', i.date) >= (i.cash || 0) - 0.5 && c.L.bal('112', i.date) > 0 ? 'tk' : '' }],
+      apply: v => { if (!v.act) return 'W13: chưa chọn cách xử lý (tài khoản ngân hàng không đủ số dư để đổi sang 112)'; const set = new Set(ids); let n = 0; S().journal.forEach(x => { if (!set.has(x.id)) return; if (v.act === 'ok') { if (/^(15|2[1-4]|6|8)/.test(x.no)) { x.tn = 'OK'; n++; } } else if (String(x.co).startsWith('111')) { x.co = '112' + String(x.co).slice(3); n++; } }); return n ? '' : 'Không tìm thấy dòng cần sửa'; } };
+  } else if (/^(T03|T04|T05|T06|X06)$/.test(i.code)) {
+    const mm = /[Tt]háng (\d{2})\/(\d{4})/.exec(i.msg || ''); const m = mm ? mm[2] + '-' + mm[1] : '';
+    const kind = { T03: 'bl', T04: 'kh', T05: 'pb', T06: 'kc' }[i.code] || (/lương/.test(i.msg) ? 'bl' : /khấu hao/.test(i.msg) ? 'kh' : 'pb');
+    const nm = { bl: 'lương, BHXH, thuế TNCN', kh: 'khấu hao TSCĐ', pb: 'phân bổ chi phí trả trước', kc: 'kết chuyển chi phí dịch vụ/sản xuất (154 → 632) và xác định kết quả (911)' }[kind];
+    if (m) p = { key: 'G|' + kind + '|' + m, desc: (i.code === 'X06' ? 'Sinh lại' : 'Sinh') + ' bút toán tự động ' + nm + ' tháng ' + m.slice(5) + '/' + m.slice(0, 4) + ' theo dữ liệu hiện tại', fields: [],
+      apply: () => { const A = KT.auto; if (kind === 'kc') { const pr = A.production(m), have = new Set(S().journal.filter(l => !l.tag && String(l.ng || '').slice(0, 7) === m).map(l => String(l.no).slice(0, 3) + '/' + String(l.co).slice(0, 3))), pl = pr.lines.filter(l => !have.has(String(l.no).slice(0, 3) + '/' + String(l.co).slice(0, 3))); if (pl.length) { A.apply(pr.tag, pl); KT.touch(true); } }
+        const r = kind === 'bl' ? A.payroll(m) : kind === 'kh' ? A.depreciation(m) : kind === 'pb' ? A.prepaid(m) : A.closing(D.bom(m), D.eom(m), 'tháng ' + m.slice(5)); if (!r.lines.length) return 'Không có số liệu để sinh ' + nm; A.apply(r.tag, r.lines); return ''; } };
+  } else if (i.code === 'X10' && i.emp) {
+    const e = S().employees.find(x => x.code === i.emp);
+    if (e) p = { key: 'NVX|' + e.code, desc: 'Chuyển ' + e.code + ' thành đối tượng tập thể (không tính lương), sau đó sinh lại bút toán lương và kết chuyển của các tháng bị ảnh hưởng', fields: [{ k: 'act', label: 'Xử lý', ty: 'sel', opts: [['tap', 'Chuyển thành tập thể, sinh lại bút toán'], ['del', 'Xóa hẳn nhân viên, sinh lại bút toán']], value: 'tap' }],
+      apply: v => { const A = KT.auto;
+        if (v.act === 'del') { S().employees = S().employees.filter(x => x !== e); S().journal.forEach(l => { ['dt', 'dn', 'dc', 'dt2'].forEach(k => { if (l[k] === e.code) l[k] = ''; }); }); }
+        else Object.assign(e, { tapThe: true, vao: '1900-01-01', nghi: '1900-01-01', thamGiaBH: false, thueKieu: 'khongkhautru' });
+        KT.touch(true); const tags = [...new Set(S().journal.filter(l => l.tag && /^auto-bl:/.test(l.tag)).map(l => l.tag))];
+        tags.forEach(tg => { const m = tg.slice(8), r = A.payroll(m); KT.S.journal = KT.S.journal.filter(l => l.tag !== tg); KT.touch(true); if (r.lines.length) A.apply(tg, A.payroll(m).lines); });
+        [...new Set(S().journal.filter(l => l.tag && /^auto-kc:/.test(l.tag)).map(l => l.tag))].forEach(tg => { const k = /^auto-kc:(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/.exec(tg); if (!k) return; KT.S.journal = KT.S.journal.filter(l => l.tag !== tg); KT.touch(true); const r = A.closing(k[1], k[2], 'tháng ' + k[2].slice(5, 7)); if (r.lines.length) A.apply(tg, r.lines); });
+        KT.touch(true); return ''; } };
+  } else if (i.code === 'T07' && i.per) {
+    p = { key: 'G|gtgt|' + i.per, desc: 'Ghi bút toán khấu trừ thuế GTGT kỳ ' + (i.label || i.per) + ' (Nợ 3331 / Có 133) theo số liệu hiện tại', fields: [], apply: () => { const r = KT.auto.vatOffset(i.per); if (!r.lines.length) return 'Không có số thuế để khấu trừ'; KT.auto.apply(r.tag, r.lines); return ''; } };
+  } else if (i.code === 'T08' && i.yr) {
+    p = { key: 'G|tndn|' + i.yr, desc: 'Ghi chi phí thuế TNDN hiện hành năm ' + i.yr + ' (Nợ 8211 / Có 3334)', fields: [], apply: () => { const r = KT.auto.citExpense(i.yr); if (!r.lines.length) return 'Không có thuế TNDN phải nộp'; KT.auto.apply(r.tag, r.lines); return ''; } };
+  } else if ((i.code === 'X08' || i.code === 'X09') && i.tag) {
+    const tg = i.tag, nh = (i.hits || []).length;
+    p = { key: 'X8|' + tg, desc: i.code === 'X08' ? 'Bút toán tự động trùng với ' + nh + ' dòng nhập tay; chọn cách xử lý' : 'Bút toán tự động ở tháng không có nghiệp vụ; đề xuất bỏ', fields: [{ k: 'act', label: 'Xử lý', ty: 'sel', opts: i.code === 'X08' ? [['drop', 'Giữ nhập tay, bỏ bút toán tự động'], ['replace', 'Thay ' + nh + ' dòng nhập tay bằng bút toán tự động']] : [['drop', 'Bỏ bút toán tự động này']], value: 'drop' }],
+      apply: v => { const n0 = S().journal.length; if (v.act === 'replace') { const set = new Set(i.hits); S().journal = S().journal.filter(l => !set.has(l.id)); } else S().journal = S().journal.filter(l => l.tag !== tg); return S().journal.length < n0 || !S().journal.some(l => l.tag === tg) ? '' : 'Không còn gì để xử lý'; } };
+  } else if (i.code === 'X05__off' && i.date) {
+    const m = String(D.parse(i.date) || '').slice(0, 7);
+    p = { key: 'X5|' + m, desc: 'Tháng ' + m.slice(5) + '/' + m.slice(0, 4) + ' bị kết chuyển hai lần (nhập tay và tự động); chỉ giữ một bên', fields: [{ k: 'act', label: 'Giữ', ty: 'sel', opts: [['auto', 'Bút toán tự động (xóa dòng nhập tay)'], ['tay', 'Dòng nhập tay (xóa bút toán tự động)']], value: 'auto' }],
+      apply: v => { const inM = l => String(D.parse(l.ng) || '').slice(0, 7) === m, is911 = l => String(l.no).startsWith('911') || String(l.co).startsWith('911'); const n0 = S().journal.length;
+        S().journal = S().journal.filter(l => !(inM(l) && (v.act === 'tay' ? (l.tag && l.tag.startsWith('auto-kc:')) : (!l.tag && is911(l))))); return S().journal.length < n0 ? '' : 'Không còn dòng trùng'; } };
+  } else if (/^(X01|X03|X04|X07)__off$/.test(i.code) && j) {
+    p = { key: 'X|' + i.id, desc: 'Xóa dòng nhập tay này vì đã có bút toán tự động cùng nội dung', fields: [], apply: () => { S().journal = S().journal.filter(l => l !== j); return ''; } };
+  } else if (i.code === 'D01' && j && /^511/.test(j.no) && /^(111|112|131)/.test(j.co)) {
+    const g = KT.acc.has('5211') ? '5211' : '521';
+    p = { key: 'A|' + i.id + '|no', desc: 'Giảm trừ doanh thu ghi Nợ ' + g + ' thay vì Nợ ' + j.no, fields: [{ k: 'acc', label: 'TK Nợ', value: g, list: 'fx-acc', w: 80 }], apply: v => { if (!KT.acc.has((v.acc || '').trim())) return 'Tài khoản không có trong hệ thống'; j.no = v.acc.trim(); return ''; } };
+  } else if (i.code === 'D04' && j) {
+    const it = S().items.find(x => x.code === j.vt), g = (it && it.tk) || '156';
+    p = { key: 'A|' + i.id + '|no', desc: 'Hàng mua về ghi nhập kho Nợ ' + g + ' thay vì Nợ 632', fields: [{ k: 'acc', label: 'TK Nợ', value: g, list: 'fx-acc', w: 80 }], apply: v => { if (!KT.acc.has((v.acc || '').trim())) return 'Tài khoản không có trong hệ thống'; j.no = v.acc.trim(); return ''; } };
+  } else if (i.code === 'W11' && j) {
+    const it = S().items.find(x => x.code === j.vt), fl = /^15/.test(j.no) ? 'no' : 'co';
+    if (it && it.tk) p = { key: 'A|' + i.id + '|' + fl, desc: 'Mã hàng ' + j.vt + ' thuộc kho TK ' + it.tk + '; đề xuất đổi TK ' + (fl === 'no' ? 'Nợ' : 'Có'), fields: [{ k: 'acc', label: 'TK ' + (fl === 'no' ? 'Nợ' : 'Có'), value: it.tk, list: 'fx-acc', w: 80 }], apply: v => { if (!KT.acc.has((v.acc || '').trim())) return 'Tài khoản không có trong hệ thống'; j[fl] = v.acc.trim(); return ''; } };
+  } else if ((i.code === 'W17' || i.code === 'T02') && i.ct) {
+    const e = (c.adds || []).find(x => x.line.ct === i.ct);
+    if (e) p = { key: 'V|' + i.ct, desc: 'Thêm dòng thuế GTGT Nợ ' + e.line.no + ' / Có ' + e.line.co + ' (' + e.line.thue + '% × ' + f(e.line.gt) + ')', fields: [{ k: 'amt', label: 'Số thuế', value: f(e.line.st), w: 110 }],
+      apply: v => { const a = KT.rnd(num(v.amt)); if (!a) return 'Chưa có số thuế'; S().journal.push(Object.assign({}, e.line, { st: a, id: KT.newId(), mod: D.today() })); return ''; } };
+  } else if (i.code === 'W19' && j) {
+    p = { key: 'R|' + i.id, desc: 'Ngoài thời hạn giảm thuế: đề xuất thuế suất 10% và tính lại số thuế', fields: [{ k: 'amt', label: 'Số thuế 10%', value: f(KT.rnd(num(j.st) * 10 / 8)), w: 110 }], apply: v => { j.thue = '10'; j.st = KT.rnd(num(v.amt)); return ''; } };
+  } else if (i.code === 'W20' && j) {
+    const sib = S().journal.filter(x => x !== j && ((j.ct && x.ct === j.ct) || (j.dt && x.dt === j.dt)) && x.hd);
+    const s1 = sib.find(x => x.ct === j.ct) || {}, s2 = sib.find(x => x.kh) || {};
+    const nhd = { k: 'nhd', label: 'Ngày HĐ', value: D.fmt(D.parse(j.nhd) || D.parse(j.ng) || ''), w: 90 }, kh = { k: 'kh', label: 'Ký hiệu', value: j.kh || s1.kh || s2.kh || '', w: 90 };
+    if (i.sev === 'warn') p = { key: 'H|' + i.id, desc: 'Điền số hóa đơn cho dòng thuế' + (s1.hd ? ' (lấy theo dòng cùng chứng từ)' : ''), fields: [{ k: 'hd', label: 'Số HĐ', value: s1.hd || '', w: 100 }, kh, nhd],
+      apply: v => { if (!(v.hd || '').trim()) return 'Chưa nhập số hóa đơn'; j.hd = v.hd.trim(); if (v.kh) j.kh = v.kh.trim(); if (D.parse(v.nhd)) j.nhd = D.parse(v.nhd); return ''; } };
+    else p = { key: 'H|' + i.id, desc: 'Điền ký hiệu và ngày hóa đơn (mẫu: ngày hóa đơn = ngày chứng từ)', fields: [kh, nhd],
+      apply: v => { if (!(v.kh || '').trim()) return 'Chưa nhập ký hiệu hóa đơn'; j.kh = v.kh.trim(); if (D.parse(v.nhd)) j.nhd = D.parse(v.nhd); return ''; } };
+  } else if (i.code === 'W21' && j && i.sev === 'warn') {
+    const sib = S().journal.find(x => x !== j && j.ct && x.ct === j.ct && (x.dt || x.dn || x.dc)), mp = fix.matchPartner(j.dg || (sib || {}).dg || '');
+    const code = sib ? (sib.dt || sib.dn || sib.dc) : mp ? mp.code : '';
+    p = { key: 'D|' + i.id + '|vat', desc: 'Gắn đối tượng cho dòng thuế' + (sib ? ' theo dòng cùng chứng từ' : mp ? ' theo tên trong diễn giải' : ''), fields: [{ k: 'dt', label: 'Mã đối tượng', value: code, list: 'fx-pt', w: 110 }],
+      apply: v => { const cd = (v.dt || '').trim(); if (!cd) return 'Chưa có mã đối tượng'; if (!hasCode(cd)) return 'Mã đối tượng chưa có trong danh mục'; j.dt = cd; return ''; } };
+  } else if (i.code === 'W21' && i.sev === 'info') {
+    const cd = (/Đối tượng (\S+)/.exec(i.msg) || [])[1], pt = cd && S().partners.find(x => x.code === cd);
+    if (pt) p = { key: 'MST|' + cd, desc: 'Nhập mã số thuế cho ' + cd + ' ' + (pt.name || ''), fields: [{ k: 'mst', label: 'MST', value: '', w: 120 }], apply: v => { if (!(v.mst || '').trim()) return 'Chưa nhập MST'; pt.mst = v.mst.trim(); return ''; } };
+  } else if (/^(W23|W24|W25|W26)$/.test(i.code)) {
+    const cd = (/Nhân viên (\S+)/.exec(i.msg) || [])[1], e = cd && S().employees.find(x => x.code === cd);
+    const fd = { W23: ['cccd', 'Số CCCD'], W24: ['soBHXH', 'Số sổ BHXH'], W25: ['mst', 'MST cá nhân'], W26: ['luongCB', 'Lương cơ bản'] }[i.code];
+    if (e) p = { key: 'NV|' + cd + '|' + fd[0], desc: 'Nhập ' + fd[1].toLowerCase() + ' cho ' + cd + ' ' + e.name + (i.code === 'W25' ? ' (mẫu: dùng số CCCD làm MST cá nhân)' : ''), fields: [{ k: 'v', label: fd[1], value: i.code === 'W25' ? (e.cccd || '') : '', w: 130 }],
+      apply: v => { const x = (v.v || '').trim(); if (!x) return 'Chưa nhập ' + fd[1].toLowerCase() + ' của ' + cd; e[fd[0]] = fd[0] === 'luongCB' ? num(x) : x; return ''; } };
   } else if (/^(E06|E08|W07|W16)$/.test(i.code)) p = { key: 'L|' + i.code, link: 'filldk', desc: 'Tiền hoặc tồn kho bị âm thường là do thiếu số dư đầu kỳ.' };
   return p;
 };
 const valOf = p => Object.assign(Object.fromEntries((p.fields || []).map(x => [x.k, x.value])), fx.vals[p.key] || {});
-fix.all = () => { const m = new Map(); KT.compute().issues.forEach(i => { const p = fix.propose(i); if (p && p.apply && !fx.skip[p.key] && !m.has(p.key)) m.set(p.key, p); }); return m; };
+fix.all = () => { const m = new Map(); KT.compute().issues.concat(KT.audit()).forEach(i => { const p = fix.propose(i); if (p && p.apply && !fx.skip[p.key] && !m.has(p.key)) m.set(p.key, p); }); return m; };
 const fld = (p, x) => '<label class="small muted" style="display:inline-flex;gap:4px;align-items:center">' + E(x.label) + (x.ty === 'sel' ? '<select data-c="fxf" data-key="' + E(p.key) + '" data-k="' + x.k + '">' + x.opts.map(o => '<option value="' + o[0] + '"' + (valOf(p)[x.k] === o[0] ? ' selected' : '') + '>' + E(o[1]) + '</option>').join('') + '</select>' : '<input data-c="fxf" data-key="' + E(p.key) + '" data-k="' + x.k + '" value="' + E(valOf(p)[x.k]) + '"' + (x.list ? ' list="' + x.list + '"' : '') + ' style="width:' + (x.w || 100) + 'px" autocomplete="off">') + '</label>';
+fix._reg = new Map();
 fix.html = i => {
-  const p = fix.propose(i); if (!p || fx.skip[p.key]) return '';
+  const p = fix.propose(i); if (!p || fx.skip[p.key]) return ''; if (p.apply) fix._reg.set(p.key, p);
   if (p.link) return '<div class="small muted" style="margin-top:4px">' + E(p.desc) + ' <button class="btn sm" data-a="filldk">Xem gợi ý số dư đầu kỳ</button></div>';
   return '<div class="notice small" style="margin-top:6px"><div><b>Đề xuất:</b> ' + E(p.desc) + '</div><div class="row" style="gap:10px;margin-top:5px;flex-wrap:wrap;align-items:center">' + p.fields.map(x => fld(p, x)).join('') + '<button class="btn sm pri" data-a="fxok" data-key="' + E(p.key) + '">Chấp nhận</button><button class="btn sm" data-a="fxno" data-key="' + E(p.key) + '">Bỏ qua</button></div></div>';
 };
 fix.bar = () => {
-  const n = fix.all().size, dl = '<datalist id="fx-acc">' + S().accounts.map(a => '<option value="' + E(a.code) + '">' + E(a.name) + '</option>').join('') + '</datalist><datalist id="fx-pt">' + allP().map(p => '<option value="' + E(p.code) + '">' + E(p.name) + '</option>').join('') + '</datalist>';
-  return dl + '<div class="card" style="padding:10px 14px"><div class="row"><div style="flex:1"><b>Đề xuất sửa lỗi</b><div class="muted small">Dưới mỗi lỗi có đề xuất điền sẵn: bạn sửa lại ô nếu chưa đúng rồi bấm Chấp nhận, hoặc Bỏ qua. ' + (n ? 'Hiện có <b>' + n + '</b> đề xuất.' : 'Hiện không có đề xuất nào.') + '</div></div>' + (n ? '<button class="btn pri" data-a="fxall">Chấp nhận tất cả (' + n + ')</button>' : '') + (Object.keys(fx.skip).length ? '<button class="btn" data-a="fxreset">Hiện lại đề xuất đã bỏ qua</button>' : '') + '</div></div>';
+  const n = fix.all().size, dl = '<datalist id="fx-acc">' + S().accounts.map(a => '<option value="' + E(a.code) + '">' + E(a.name) + '</option>').join('') + '</datalist><datalist id="fx-it">' + S().items.map(x => '<option value="' + E(x.code) + '">' + E(x.name) + '</option>').join('') + '</datalist><datalist id="fx-pt">' + allP().map(p => '<option value="' + E(p.code) + '">' + E(p.name) + '</option>').join('') + '</datalist>';
+  const iss = KT.compute().issues.filter(i => i.id), codes = {}; iss.forEach(i => { (codes[i.code] = codes[i.code] || new Set()).add(i.id); });
+  const opts = Object.keys(codes).sort().map(c => '<option value="' + c + '">' + c + ' (' + codes[c].size + ' dòng)</option>').join('');
+  const nsel = Object.keys(fx.sel).length;
+  return dl + '<div class="card" style="padding:10px 14px"><div class="row"><div style="flex:1"><b>Đề xuất sửa lỗi</b><div class="muted small">Dưới mỗi lỗi có đề xuất điền sẵn: bạn sửa lại ô nếu chưa đúng rồi bấm Chấp nhận, hoặc Bỏ qua. ' + (n ? 'Hiện có <b>' + n + '</b> đề xuất.' : 'Hiện không có đề xuất nào.') + '</div></div>' + (n ? '<button class="btn pri" data-a="fxall">Chấp nhận tất cả (' + n + ')</button>' : '') + (Object.keys(fx.skip).length ? '<button class="btn" data-a="fxreset">Hiện lại đề xuất đã bỏ qua</button>' : '') + '</div>' +
+    '<div class="row" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line,#e3e3e3);gap:8px;flex-wrap:wrap;align-items:center"><b class="small">Xóa dòng có lỗi</b><span class="muted small">Tick ô đầu mỗi lỗi, hoặc chọn nhanh:</span><select data-c="fxbycode"><option value="">Chọn theo mã lỗi…</option>' + opts + '</select><button class="btn sm" data-a="fxselall">Chọn tất cả đang hiển thị</button><button class="btn sm" data-a="fxselclr">Bỏ chọn</button><label class="small muted" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" data-c="fxwhole"' + (fx.whole ? ' checked' : '') + '> Xóa cả chứng từ (mọi dòng cùng số chứng từ)</label><span class="sp" style="flex:1"></span><span class="small" id="fxcnt">Đã chọn ' + nsel + ' dòng</span><button class="btn dng" data-a="fxdel">Xóa các dòng đã chọn</button><button class="btn" data-a="clrdata">Xóa dữ liệu…</button></div></div>';
 };
-const run = keys => {
-  const m = fix.all(); const ps = keys.map(k => m.get(k)).filter(Boolean); if (!ps.length) { UI.toast('Đề xuất này không còn áp dụng được'); UI.render(); return; }
+const run = fix.run = keys => {
+  const m = fix.all(); const ps = keys.map(k => m.get(k) || fix._reg.get(k)).filter(Boolean); fix._reg.clear(); if (!ps.length) { UI.toast('Đề xuất này không còn áp dụng được'); UI.render(); return; }
   KT.snapshot(); let ok = 0; const bad = []; ps.forEach(p => { const r = p.apply(valOf(p)); if (r) bad.push(r); else ok++; });
   KT.touch(true); UI.render(); UI.toast('Đã áp dụng ' + ok + ' đề xuất' + (bad.length ? ', ' + bad.length + ' đề xuất chưa áp dụng được (' + bad[0] + ')' : '') + '. Bút toán sửa xong có thể hoàn tác.');
 };
@@ -4451,23 +4575,182 @@ UI.chg.fxf = el => { const k = el.dataset.key; (fx.vals[k] = fx.vals[k] || {})[e
 UI.act.fxok = el => run([el.dataset.key]);
 UI.act.fxno = el => { fx.skip[el.dataset.key] = 1; UI.render(); };
 UI.act.fxreset = () => { fx.skip = {}; UI.render(); };
+const shownIds = () => { const f = UI.sub.chk || ''; return KT.compute().issues.filter(i => i.id && (!f || i.sev === f)).map(i => i.id); };
+UI.chg.fxsel = el => { if (el.checked) fx.sel[el.dataset.id] = 1; else delete fx.sel[el.dataset.id]; const c = $('#fxcnt'); if (c) c.textContent = 'Đã chọn ' + Object.keys(fx.sel).length + ' dòng'; };
+UI.chg.fxwhole = el => { fx.whole = el.checked; };
+UI.chg.fxbycode = el => { if (!el.value) return; KT.compute().issues.filter(i => i.id && i.code === el.value).forEach(i => { fx.sel[i.id] = 1; }); UI.render(); };
+UI.act.fxselall = () => { shownIds().forEach(id => { fx.sel[id] = 1; }); UI.render(); };
+UI.act.fxselclr = () => { fx.sel = {}; UI.render(); };
+const delLines = ids => {
+  const J = S().journal; let set = new Set(ids);
+  if (fx.whole) { const cts = new Set(J.filter(l => set.has(l.id) && l.ct).map(l => l.ct)); J.forEach(l => { if (l.ct && cts.has(l.ct)) set.add(l.id); }); }
+  const n = J.filter(l => set.has(l.id)).length; if (!n) { UI.toast('Không có dòng nào để xóa'); return; }
+  UI.ask('Xóa <b>' + n + '</b> dòng bút toán' + (fx.whole ? ' (gồm cả các dòng cùng số chứng từ)' : '') + '? Có thể bấm Hoàn tác sau khi xóa.', 'Xóa', () => { KT.snapshot(); S().journal = S().journal.filter(l => !set.has(l.id)); fx.sel = {}; KT.touch(true); UI.render(); UI.toast('Đã xóa ' + n + ' dòng. Bấm Hoàn tác nếu nhầm.'); }, true);
+};
+UI.act.fxdel = () => delLines(Object.keys(fx.sel));
+UI.act.fxdel1 = el => delLines([el.dataset.id]);
 UI.act.fxall = () => { const n = fix.all().size; UI.ask('Chấp nhận <b>' + n + '</b> đề xuất sửa với đúng các giá trị đang điền sẵn? Hãy xem lại các ô đã điền; có thể bấm Hoàn tác sau khi áp dụng (phần bút toán).', 'Chấp nhận tất cả', () => { UI.closeModal(); run([...fix.all().keys()]); }); };
 
 /* ---------- Xóa dữ liệu có chọn phạm vi ---------- */
 UI.act.clrdata = () => {
   const J = S().journal, auto = J.filter(l => l.tag).length, mons = [...new Set(J.map(l => D.ym(D.parse(l.ng) || '')).filter(Boolean))].sort();
-  UI.modal('Xóa dữ liệu', '<div class="notice warn small">Chỉ xóa <b>bút toán</b> (và số dư đầu kỳ nếu bạn chọn). <b>Danh mục</b> (đối tượng, hàng hóa, nhân viên, TSCĐ…), hồ sơ công ty, tài khoản được giữ nguyên. Xóa xong có thể bấm <b>Hoàn tác</b> ở góc trên; nên xuất sao lưu trước nếu dữ liệu quan trọng.</div>' +
+  UI.modal('Xóa dữ liệu', '<div class="notice warn small">Ba lựa chọn đầu chỉ xóa <b>bút toán</b> (và số dư đầu kỳ nếu bạn tick); <b>danh mục</b> (đối tượng, hàng hóa, nhân viên, TSCĐ…), hồ sơ công ty, hệ thống tài khoản được giữ nguyên và xóa xong bấm <b>Hoàn tác</b> ở góc trên được. Nên bấm “Xuất sao lưu trước” nếu dữ liệu quan trọng.</div>' +
     '<div class="form" style="grid-template-columns:1fr;gap:8px;margin-top:10px"><label class="row" style="gap:8px"><input type="radio" name="clrscope" value="all" checked> Toàn bộ bút toán trong Sổ PS (' + J.length + ' dòng)</label>' +
     '<label class="row" style="gap:8px"><input type="radio" name="clrscope" value="auto"> Chỉ bút toán tự sinh (' + auto + ' dòng: lương, khấu hao, kết chuyển…)</label>' +
     '<label class="row" style="gap:8px"><input type="radio" name="clrscope" value="month"> Chỉ một tháng: <select id="clrm">' + mons.map(m => '<option value="' + m + '">' + m.slice(5) + '/' + m.slice(0, 4) + ' (' + J.filter(l => D.ym(D.parse(l.ng) || '') === m).length + ' dòng)</option>').join('') + '</select></label>' +
-    '<label class="row" style="gap:8px;margin-top:6px"><input type="checkbox" id="clropen"> Xóa cả <b>số dư đầu kỳ</b> (' + S().opening.length + ' dòng)</label></div>', '<button class="btn" data-a="close">Hủy</button><button class="btn dng" data-a="clrgo">Xóa</button>');
+    '<label class="row" style="gap:8px;margin-top:6px"><input type="checkbox" id="clropen"> Xóa cả <b>số dư đầu kỳ</b> (' + S().opening.length + ' dòng) <span class="muted small">(áp dụng cho ba lựa chọn trên)</span></label>' +
+    '<hr style="width:100%;border:0;border-top:1px solid var(--line,#ddd)"><label style="display:flex;gap:8px;align-items:flex-start"><input type="radio" name="clrscope" value="everything" style="margin-top:3px"> <span style="flex:1"><b>Toàn bộ sổ, bắt đầu trống</b>: xóa cả bút toán, số dư đầu kỳ, danh mục, nhân viên, TSCĐ, bảng lương. <b>Không hoàn tác được</b>.</span></label></div>', '<button class="btn" data-a="backup">Xuất sao lưu trước</button><span class="sp"></span><button class="btn" data-a="close">Hủy</button><button class="btn dng" data-a="clrgo">Xóa</button>');
 };
 UI.act.clrgo = () => {
   const sc = (document.querySelector('input[name=clrscope]:checked') || {}).value || 'all', mo = ($('#clrm') || {}).value || '', op = !!($('#clropen') || {}).checked;
+  if (sc === 'everything') { UI.act.wipe(); return; }
   const test = l => sc === 'all' ? true : sc === 'auto' ? !!l.tag : D.ym(D.parse(l.ng) || '') === mo; const n = S().journal.filter(test).length;
   if (!n && !op) { UI.toast('Không có dòng nào để xóa'); return; }
-  UI.ask('Xóa <b>' + n + '</b> dòng bút toán' + (sc === 'month' ? ' của tháng ' + mo.slice(5) + '/' + mo.slice(0, 4) : sc === 'auto' ? ' tự sinh' : '') + (op ? ' và toàn bộ số dư đầu kỳ' : '') + '? Có thể hoàn tác.', 'Xóa', () => { KT.snapshot(); S().journal = S().journal.filter(l => !test(l)); if (op) S().opening = []; KT.touch(true); UI.closeModal(); UI.ps = Object.assign(UI.ps, { ym: '', q: '', only: '', page: null }); fx.skip = {}; fx.vals = {}; UI.render(); UI.toast('Đã xóa ' + n + ' dòng' + (op ? ' và số dư đầu kỳ' : '') + '. Bấm Hoàn tác nếu nhầm.'); }, true);
+  UI.ask('Xóa <b>' + n + '</b> dòng bút toán' + (sc === 'month' ? ' của tháng ' + mo.slice(5) + '/' + mo.slice(0, 4) : sc === 'auto' ? ' tự sinh' : '') + (op ? ' và toàn bộ số dư đầu kỳ' : '') + '? Có thể hoàn tác.', 'Xóa', () => { KT.snapshot(); S().journal = S().journal.filter(l => !test(l)); if (op) S().opening = []; KT.touch(true); UI.closeModal(); UI.ps = Object.assign(UI.ps, { ym: '', q: '', only: '', page: null }); fx.skip = {}; fx.vals = {}; fx.sel = {}; UI.render(); UI.toast('Đã xóa ' + n + ' dòng' + (op ? ' và số dư đầu kỳ' : '') + '. Bấm Hoàn tác nếu nhầm.'); }, true);
 };
+})(window);
+
+/* ===== TRỢ LÝ NHẮC VIỆC (góc dưới bên phải) =====
+   Nhắc còn thiếu nghiệp vụ gì theo: lần nhập (chứng từ vừa ghi), ngày, tháng, quý, năm.
+   Chỉ đọc sổ và nhắc; không tự ghi gì. Bấm “Xem” để nhảy tới màn hình xử lý. */
+(function (G) {
+'use strict';
+const KT = G.KT, UI = KT.ui, D = KT.d, E = KT.esc, $ = UI.$, S = () => KT.S, f = KT.f;
+const as = KT.assist = { open: false, tab: 'lan', bubble: '', _lan: null };
+const TABS = [['lan', 'Lần nhập'], ['ngay', 'Ngày'], ['thang', 'Tháng'], ['quy', 'Quý'], ['nam', 'Năm']];
+const HINT = { lan: 'Soát 3 chứng từ ghi gần nhất xem còn thiếu bút toán đi kèm (giá vốn, thuế, đối tượng, mã hàng…).', ngay: 'Hôm nay và ngày ghi sổ gần nhất: có nhập đủ chưa, quỹ và ngân hàng có khớp không.', thang: 'Từng tháng có dữ liệu: thiếu (lương, khấu hao, phân bổ, kết chuyển), sai (lỗi, cảnh báo, quỹ âm), trùng (tự động chồng nhập tay), kết chuyển 911 còn dư.', quy: 'Từng quý: khấu trừ GTGT, tháng còn việc chưa xong, tờ khai theo quý.', nam: 'Từng năm có dữ liệu: tháng chưa kết chuyển, thuế TNDN, quyết toán, khóa sổ.' };
+const ml = m => m.slice(5) + '/' + m.slice(0, 4);
+const ST = { late: 'quá hạn', soon: 'sắp đến hạn', unpaid: 'đã khai, chưa nộp tiền', open: 'chưa đến hạn' };
+
+as.compute = () => {
+  const today = D.today(); if (as._c && as._c.ver === KT.version && as._c.today === today) return as._c.r;
+  const r = { lan: [], ngay: [], thang: [], quy: [], nam: [] }; const push = (k, sev, msg, go, ct, m, fx) => r[k].push({ sev, msg, go: go || '', ct: ct || '', m: m || '', fx: fx || [] });
+  const L = KT.compute(), A = KT.auto, J = S().journal, manD = J.filter(l => !l.tag).map(l => D.parse(l.ng)).filter(Boolean).sort(), lastD = manD[manD.length - 1] || L.last || '', first = manD[0] || L.first || '', sec = fn => { try { fn(); } catch (e) { console.error('assist', e); } };
+  const cur = today.slice(0, 7), ymL = l => l.date.slice(0, 7), eom = m => D.eom(m);
+
+  /* ---- Lần nhập ---- */
+  sec(() => {
+    const cts = []; for (let i = J.length - 1; i >= 0 && cts.length < 3; i--) { const c = J[i].ct; if (c && !cts.includes(c)) cts.push(c); }
+    if (!cts.length) { push('lan', 'info', 'Chưa có chứng từ nào. Nhập chứng từ đầu tiên hoặc số dư đầu kỳ.', 'ps'); return; }
+    const seen = new Set(); const add = (sev, msg, ct, i) => { if (seen.has(msg)) return; seen.add(msg); push('lan', sev, msg, 'ps', ct, '', i ? [i] : []); };
+    KT.audit().filter(a => cts.includes(a.ct)).forEach(a => add(a.sev === 'err' ? 'err' : 'warn', '[' + a.ct + '] ' + a.msg, a.ct, a));
+    L.issues.filter(i => cts.includes(i.ct) && i.sev !== 'info').forEach(i => add(i.sev === 'err' ? 'err' : 'warn', '[' + i.ct + '] ' + i.msg, i.ct, i));
+    if (!r.lan.length) push('lan', 'ok', 'Chứng từ vừa ghi (' + cts.join(', ') + ') chưa thấy thiếu bút toán đi kèm.', 'ps', cts[0]);
+  });
+
+  /* ---- Ngày ---- */
+  sec(() => {
+    if (!lastD) { push('ngay', 'info', 'Sổ chưa có bút toán nào.', 'ps'); return; }
+    const gap = D.diff(lastD, today);
+    if (gap > 0) push('ngay', gap >= 3 && gap <= 45 ? 'warn' : 'info', 'Sổ mới ghi đến ngày ' + D.fmt(lastD) + '; đến hôm nay (' + D.fmt(today) + ') chưa có nghiệp vụ nào (' + gap + ' ngày). Có thu chi, bán hàng, mua hàng phát sinh thì nhập bổ sung (Nhập nhanh, hoặc dán sao kê ngân hàng).', 'nn');
+    else push('ngay', 'ok', 'Hôm nay đã có nghiệp vụ được ghi.', 'ps');
+    const day = L.lines.filter(l => l.date === lastD), cashN = day.filter(l => /^111/.test(l.no) || /^111/.test(l.co)).length, bankN = day.filter(l => /^112/.test(l.no) || /^112/.test(l.co)).length;
+    if (cashN) push('ngay', 'info', 'Ngày ' + D.fmt(lastD) + ' có ' + cashN + ' dòng thu chi tiền mặt: đối chiếu quỹ thực tế với số dư sổ ' + f(L.bal('111', lastD)) + '.', 'sach');
+    if (bankN) push('ngay', 'info', 'Ngày ' + D.fmt(lastD) + ' có ' + bankN + ' dòng ngân hàng: đối chiếu sao kê, số dư sổ ' + f(L.bal('112', lastD)) + '.', 'sach');
+    if (L.bal('111', lastD) < -0.5) push('ngay', 'err', 'Quỹ tiền mặt âm ' + f(-L.bal('111', lastD)) + ' tại ' + D.fmt(lastD) + ': thiếu phiếu thu hoặc số dư đầu kỳ.', 'chk', '', '', [{ code: 'E06' }]);
+    if (L.bal('112', lastD) < -0.5) push('ngay', 'err', 'Tiền gửi ngân hàng âm ' + f(-L.bal('112', lastD)) + ' tại ' + D.fmt(lastD) + ': thiếu bút toán thu hoặc số dư đầu kỳ.', 'chk');
+    L.issues.filter(i => i.date === lastD && /^W(17|18|19|20|21)$/.test(i.code)).slice(0, 3).forEach(i => push('ngay', 'warn', i.msg, 'ps', i.ct, '', [i]));
+  });
+
+  /* ---- Tháng: soát từng tháng có dữ liệu (thiếu / đủ / sai / trùng) ---- */
+  const allI = (() => { try { return L.issues.concat(KT.audit()); } catch (e) { return L.issues; } })();
+  const mOf = i => String(D.parse(i.date) || '').slice(0, 7) || ((/[Tt]háng (\d{2})\/(\d{4})/.exec(i.msg || '') || []).slice(1).reverse().join('-'));
+  const lastM = lastD ? lastD.slice(0, 7) : cur, firstM = first ? first.slice(0, 7) : '';
+  const MS = []; if (firstM) { let m = firstM; while (m <= lastM && MS.length < 240) { MS.push(m); m = D.addMonths(m, 1); } }
+  const manIn = m => J.some(l => !l.tag && String(D.parse(l.ng) || '').slice(0, 7) === m), coMan = (m, tk) => L.lines.some(l => !l.tag && ymL(l) === m && l.co.startsWith(tk));
+  sec(() => {
+    const okM = [];
+    MS.forEach(m => {
+      const n0 = r.thang.length, inM = L.lines.filter(l => ymL(l) === m), due = m < lastM || (m === cur && +today.slice(8) >= 25) || m < cur;
+      if (!manIn(m)) { const pv = r.thang[r.thang.length - 1]; if (pv && pv.empty && pv.m2 === D.addMonths(m, -1)) { pv.m2 = m; pv.ms.push(m); pv.msg = 'Tháng ' + ml(pv.m) + ' – ' + ml(m) + ': chưa có nghiệp vụ nhập tay nào. Nếu doanh nghiệp có hoạt động thì nhập bổ sung.'; } else { push('thang', 'warn', 'Tháng ' + ml(m) + ': chưa có nghiệp vụ nhập tay nào' + (inM.length ? ' (chỉ có bút toán tự động)' : '') + '. Nếu doanh nghiệp có hoạt động thì nhập bổ sung.', 'ps', '', m); Object.assign(r.thang[r.thang.length - 1], { empty: 1, m2: m, ms: [m] }); } return; }
+      const iM = allI.filter(i => mOf(i) === m), dup = iM.filter(i => /^X0[5789]$/.test(i.code)), er = iM.filter(i => i.sev === 'err').length, wr = iM.filter(i => i.sev === 'warn' && !/^X0[5789]$/.test(i.code)).length;
+      if (dup.length) push('thang', 'err', 'Tháng ' + ml(m) + ': ' + dup.length + ' chỗ bút toán tự động trùng với nhập tay (ghi hai lần). Bấm Xử lý để chọn giữ nhập tay hoặc thay thế.', 'chk', '', m, dup);
+      if (er || wr) push('thang', er ? 'err' : 'warn', 'Tháng ' + ml(m) + ': ' + (er ? er + ' lỗi' : '') + (er && wr ? ', ' : '') + (wr ? wr + ' cảnh báo' : '') + ' (sai hoặc thiếu thông tin).', 'chk', '', m, iM.filter(i => !/^X0[5789]$/.test(i.code)));
+      if (due) {
+        if ((S().payroll || {})[m] && Object.keys((S().payroll[m] || {}).rows || {}).length && !A.exists(A.tagOf('bl', m)) && !coMan(m, '334')) push('thang', 'warn', 'Tháng ' + ml(m) + ': có bảng lương nhưng chưa ghi bút toán lương, bảo hiểm, thuế TNCN.', 'tudong', '', m, [{ code: 'T03', msg: 'Tháng ' + ml(m) }]);
+        try { if (!coMan(m, '214') && A.depreciation(m).lines.length && !A.exists(A.tagOf('kh', m))) push('thang', 'warn', 'Tháng ' + ml(m) + ': thiếu bút toán khấu hao TSCĐ.', 'tudong', '', m, [{ code: 'T04', msg: 'Tháng ' + ml(m) }]); } catch (e) { }
+        try { if (!coMan(m, '242') && A.prepaid(m).lines.length && !A.exists(A.tagOf('pb', m))) push('thang', 'warn', 'Tháng ' + ml(m) + ': thiếu phân bổ chi phí trả trước (242).', 'tudong', '', m, [{ code: 'T05', msg: 'Tháng ' + ml(m) }]); } catch (e) { }
+        const act = inM.some(l => !l.close && (/^[5-8]/.test(l.no) || /^[5-8]/.test(l.co))), closed = inM.some(l => l.close);
+        if (act && !closed && m < lastM) push('thang', 'warn', 'Tháng ' + ml(m) + ': có doanh thu, chi phí nhưng chưa kết chuyển 911.', 'tudong', '', m, [{ code: 'T06', msg: 'Tháng ' + ml(m) }]);
+        if (act && closed) { const left = ['511', '515', '711', '632', '635', '641', '642', '811', '821'].map(a => [a, L.mov(a, D.bom(m), D.eom(m))]).map(([a, x]) => [a, x.n - x.c]).filter(x => Math.abs(x[1]) > 1);
+          if (left.length) push('thang', 'warn', 'Tháng ' + ml(m) + ': kết chuyển 911 không khớp: ' + left.map(x => { const rev = /^[57]/.test(x[0]), over = rev ? x[1] > 0 : x[1] < 0; return x[0] + (over ? ' kết chuyển thừa ' : ' còn chưa kết chuyển ') + f(Math.abs(x[1])); }).join('; ') + (left.some(x => /^[57]/.test(x[0]) ? x[1] > 0 : x[1] < 0) ? ' (thường do kết chuyển hai lần).' : '.'), 'chk', '', m, dup.length ? dup : [{ code: 'T06', msg: 'Tháng ' + ml(m) }]); }
+      }
+      if (L.bal('111', D.eom(m)) < -0.5) push('thang', 'err', 'Tháng ' + ml(m) + ': quỹ tiền mặt cuối tháng âm ' + f(-L.bal('111', D.eom(m))) + ' (thiếu phiếu thu hoặc số dư đầu kỳ).', 'chk', '', m, [{ code: 'E06' }]);
+      if (L.bal('112', D.eom(m)) < -0.5) push('thang', 'err', 'Tháng ' + ml(m) + ': tiền gửi ngân hàng cuối tháng âm ' + f(-L.bal('112', D.eom(m))) + ' (thiếu bút toán thu hoặc số dư đầu kỳ).', 'chk', '', m, [{ code: 'E06' }]);
+      if (m === lastM) { const pay = [['3383', 'BHXH'], ['3384', 'BHYT'], ['3386', 'BHTN'], ['3335', 'thuế TNCN']].map(([tk, n]) => [n, -L.bal(tk, D.eom(m))]).filter(x => x[1] > 1);
+        if (pay.length) push('thang', 'info', 'Cuối tháng ' + ml(m) + ' còn phải nộp: ' + pay.map(x => x[0] + ' ' + f(x[1])).join('; ') + '.', 'nghiavu'); }
+      if (r.thang.length === n0) okM.push(ml(m));
+    });
+    allI.filter(i => i.code === 'X09' && !MS.includes(mOf(i))).forEach(i => push('thang', 'err', i.msg, 'chk', '', mOf(i), [i]));
+    allI.filter(i => i.code === 'X10').forEach(i => push('thang', 'err', i.msg, 'nv', '', '', [i]));
+    r.thang.forEach(x => { if (!x.m) { const k = /Tháng (\d{2})\/(\d{4})/.exec(x.msg); if (k) x.m = k[2] + '-' + k[1]; } });
+    if (okM.length) push('thang', 'ok', 'Đủ và chưa thấy sai: ' + (okM.length > 6 ? okM.length + ' tháng (' + okM[0] + ' … ' + okM[okM.length - 1] + ')' : 'tháng ' + okM.join(', ')) + '.', 'chk');
+    if (!MS.length) push('thang', 'info', 'Sổ chưa có bút toán nào.', 'ps');
+  });
+
+  /* ---- Quý và Năm (thuế, kết chuyển, quyết toán) ---- */
+  const calItems = (() => { try { const y = +today.slice(0, 4), seen = new Set(), out = []; [y - 1, y].forEach(yy => KT.tax.calendar(yy, yy).forEach(x => { const k = x.name + '|' + x.deadline; if (!seen.has(k)) { seen.add(k); out.push(x); } })); return out; } catch (e) { return []; } })();
+  sec(() => {
+    const lo = D.addDays(today, -150), hi = D.addDays(today, 45);
+    calItems.filter(x => x.state !== 'done' && x.deadline >= lo && x.deadline <= hi && (!lastD || x.deadline <= D.addDays(lastD, 60)) && (x.state !== 'open' || x.deadline <= D.addDays(today, 30))).sort((a, b) => a.deadline < b.deadline ? -1 : 1).forEach(x => {
+      const k = /năm|quyết toán|môn bài|báo cáo tài chính|bctc/i.test(x.name) ? 'nam' : /quý/i.test(x.name) ? 'quy' : 'thang';
+      push(k, x.state === 'open' ? 'info' : 'warn', x.name + ' – hạn ' + D.fmt(x.deadline) + ' (' + (ST[x.state] || x.state) + ')', 'lich');
+    });
+  });
+  sec(() => {
+    const vs = lastD ? KT.tax.vatSeries(lastD) : []; vs.forEach(v => { if (v.per.to > lastD) return; const manO = L.lines.some(l => !l.tag && l.date >= v.per.from && l.date <= v.per.to && l.no.startsWith('3331') && l.co.startsWith('133')); if (!manO && !A.exists(A.tagOf('gtgt', v.per.key)) && A.vatOffset(v.per.key).lines.length) push('quy', 'warn', 'Kỳ GTGT ' + v.per.label + ' chưa ghi bút toán khấu trừ thuế (Nợ 3331 / Có 133).', 'tudong', '', '', [{ code: 'T07', per: v.per.key, label: v.per.label }]); });
+    const QS = [...new Set(MS.map(m => m.slice(0, 4) + '-Q' + Math.ceil(+m.slice(5) / 3)))];
+    QS.forEach(q => { const ms3 = MS.filter(m => m.slice(0, 4) + '-Q' + Math.ceil(+m.slice(5) / 3) === q), bad = r.thang.filter(x => (x.sev === 'warn' || x.sev === 'err') && !x.empty && ms3.includes(x.m)).length, emp = ms3.filter(m => r.thang.some(x => x.empty && x.ms.includes(m))).length;
+      push('quy', bad ? 'warn' : emp === ms3.length ? 'info' : 'ok', 'Quý ' + q.slice(6) + '/' + q.slice(0, 4) + (bad ? ': còn ' + bad + ' việc chưa xong ở các tháng trong quý.' : emp === ms3.length ? ': chưa có nghiệp vụ.' : ': các tháng có nghiệp vụ trong quý đã đủ, chưa thấy sai.'), bad ? 'chk' : '', '', '', [].concat(...r.thang.filter(x => !x.empty && ms3.includes(x.m)).map(x => x.fx || []))); });
+    if (lastD) { const lm = lastD.slice(0, 7), qEnd = D.eom(lm.slice(0, 4) + '-' + String(Math.ceil(+lm.slice(5) / 3) * 3).padStart(2, '0')), ar = L.bal('131', qEnd), ap = -L.bal('331', qEnd), parts = [];
+      if (Math.abs(ar) > 1) parts.push('phải thu khách hàng ' + f(ar)); if (Math.abs(ap) > 1) parts.push('phải trả nhà cung cấp ' + f(ap));
+      if (parts.length) push('quy', 'info', 'Cuối quý ' + Math.ceil(+lm.slice(5) / 3) + '/' + lm.slice(0, 4) + ' (' + D.fmt(qEnd) + '): ' + parts.join(', ') + '. Đối chiếu công nợ, tồn quỹ, tồn kho.', 'kh'); }
+  });
+  sec(() => {
+    const y = +today.slice(0, 4), mi = +today.slice(5, 7), years = [...new Set(MS.map(m => +m.slice(0, 4)))];
+    years.forEach(yr => {
+      const done = yr < y || mi >= 11;
+      if (done) { try { const c = A.citExpense(yr); if (c.lines.length && !A.exists(c.tag) && !L.lines.some(l => !l.tag && l.date.slice(0, 4) === String(yr) && l.no.startsWith('821'))) push('nam', 'warn', 'Năm ' + yr + ' chưa ghi chi phí thuế TNDN hiện hành (' + f(c.lines[0].st) + ').', 'tudong', '', '', [{ code: 'T08', yr }]); } catch (e) { } }
+      const miss = []; for (let m = 1; m <= 12; m++) { const ym = yr + '-' + String(m).padStart(2, '0'); if (ym >= (lastD || today).slice(0, 7)) break; const inM = L.lines.filter(l => ymL(l) === ym); if (inM.some(l => !l.close && (/^[5-8]/.test(l.no) || /^[5-8]/.test(l.co))) && !inM.some(l => l.close)) miss.push(String(m).padStart(2, '0')); }
+      if (miss.length) push('nam', 'warn', 'Năm ' + yr + ' còn ' + miss.length + ' tháng chưa kết chuyển 911: tháng ' + miss.join(', ') + '.', 'tudong', '', '', miss.map(mm => ({ code: 'T06', msg: 'Tháng ' + mm + '/' + yr })));
+      if (yr < y && (S().lockedUntil || '') < yr + '-12-31') push('nam', 'info', 'Năm ' + yr + ' chưa khóa sổ. Sau khi quyết toán và nộp báo cáo, khóa sổ để tránh sửa nhầm.', 'ht');
+    });
+    if (mi >= 11 || mi <= 1) push('nam', 'info', 'Cuối năm: kiểm kê quỹ, tồn kho, TSCĐ; đối chiếu công nợ và ngân hàng; lập báo cáo tài chính; kiểm tra số dư đầu kỳ năm sau.', 'bctc');
+  });
+  as._c = { ver: KT.version, today, r }; return r;
+};
+
+const css = document.createElement('style'); css.textContent = '.as-fx{margin-top:4px}.as-fx .notice{padding:6px 8px}.as-fx input,.as-fx select{max-width:150px}.as-bt{display:flex;flex-direction:column;gap:4px;align-items:flex-end}#assist .as-panel{width:min(520px,calc(100vw - 36px))}#assist{position:fixed;right:18px;bottom:18px;z-index:60}.as-fab{width:52px;height:52px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);box-shadow:0 4px 14px rgba(0,0,0,.28);cursor:pointer;display:grid;place-items:center;position:relative}.as-fab svg{width:24px;height:24px}.as-badge{position:absolute;top:-3px;right:-3px;background:var(--bad);color:#fff;border-radius:10px;font-size:11px;font-weight:700;min-width:19px;padding:1px 5px;line-height:16px}.as-ok{background:var(--ok)!important}.as-panel{position:absolute;right:0;bottom:62px;width:min(400px,calc(100vw - 36px));max-height:min(72vh,620px);display:flex;flex-direction:column;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 34px rgba(0,0,0,.3);overflow:hidden}.as-h{padding:11px 14px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center}.as-h b{flex:1}.as-t{display:flex;border-bottom:1px solid var(--line);background:var(--surface2)}.as-t button{flex:1;border:0;background:transparent;padding:8px 2px;cursor:pointer;font-size:12.5px;color:var(--ink2);border-bottom:2px solid transparent}.as-t button.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}.as-t i{font-style:normal;background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:0 5px;margin-left:3px;font-size:11px}.as-b{overflow:auto;padding:4px 0}.as-i{display:flex;gap:9px;padding:9px 14px;border-bottom:1px solid var(--line2);align-items:flex-start}.as-i:last-child{border-bottom:0}.as-d{flex:none;width:9px;height:9px;border-radius:50%;margin-top:5px;background:var(--info)}.as-d.warn{background:var(--warn)}.as-d.err{background:var(--bad)}.as-d.ok{background:var(--ok)}.as-i .m{flex:1;font-size:12.5px}.as-hint{padding:8px 14px;font-size:12px;color:var(--ink3)}.as-bub{position:absolute;right:0;bottom:62px;width:260px;background:var(--surface);color:var(--ink);border:1px solid var(--warn);border-radius:12px;padding:9px 12px;font-size:12.5px;box-shadow:0 6px 20px rgba(0,0,0,.25);cursor:pointer}@media print{#assist{display:none}}';
+document.head.appendChild(css);
+const root = document.createElement('div'); root.id = 'assist'; root.setAttribute('aria-live', 'polite'); document.body.appendChild(root);
+const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>';
+const propsOf = x => { if (!KT.fix || !x.fx || !x.fx.length) return []; const seen = new Set(), out = []; x.fx.forEach(i => { let p = null; try { p = KT.fix.propose(i); } catch (e) { } if (!p || (UI.fx && UI.fx.skip[p.key]) || seen.has(p.key)) return; seen.add(p.key); out.push({ i, p }); }); return out.slice(0, 12); };
+UI.act.asfx = el => { const k = as.tab + '|' + el.dataset.x; as.exp = as.exp === k ? '' : k; as.paint(); };
+UI.act.asfxall = el => { const x = as.compute()[as.tab][+el.dataset.x]; if (!x) return; const qs = propsOf(x).filter(q => q.p.apply); qs.forEach(q => KT.fix._reg.set(q.p.key, q.p)); const ks = qs.map(q => q.p.key); if (ks.length) KT.fix.run(ks); };
+const cnt = (r, k) => r[k].filter(x => x.sev === 'warn' || x.sev === 'err').length;
+as.paint = () => {
+  let r; try { r = as.compute(); } catch (e) { console.error(e); return; }
+  const total = TABS.reduce((n, t) => n + cnt(r, t[0]), 0);
+  let h = '';
+  if (as.open) {
+    const list = r[as.tab];
+    h += '<div class="as-panel" role="dialog" aria-label="Trợ lý nhắc việc"><div class="as-h"><b>Trợ lý nhắc việc</b><span class="muted small">Hôm nay ' + D.fmt(D.today()) + '</span><button class="btn sm" data-a="asopen" aria-label="Đóng">✕</button></div>' +
+      '<div class="as-t">' + TABS.map(t => '<button class="' + (as.tab === t[0] ? 'on' : '') + '" data-a="astab" data-k="' + t[0] + '">' + t[1] + (cnt(r, t[0]) ? '<i>' + cnt(r, t[0]) + '</i>' : '') + '</button>').join('') + '</div>' +
+      '<div class="as-hint">' + E(HINT[as.tab]) + '</div><div class="as-b">' +
+      (list.length ? list.map((x, xi) => { const ps = propsOf(x), op = as.exp === as.tab + '|' + xi; return '<div class="as-i"><span class="as-d ' + (x.sev === 'err' ? 'err' : x.sev === 'warn' ? 'warn' : x.sev === 'ok' ? 'ok' : '') + '"></span><div class="m">' + E(x.msg) + (op ? '<div class="as-fx">' + ps.map(q => KT.fix.html(q.i)).join('') + (ps.filter(q => q.p.apply).length > 1 ? '<div class="row" style="margin-top:6px"><button class="btn sm pri" data-a="asfxall" data-x="' + xi + '">Chấp nhận cả ' + ps.filter(q => q.p.apply).length + ' đề xuất</button></div>' : '') + '</div>' : '') + '</div><div class="as-bt">' + (ps.length ? '<button class="btn sm ' + (op ? '' : 'pri') + '" data-a="asfx" data-x="' + xi + '">' + (op ? 'Thu gọn' : 'Xử lý (' + ps.length + ')') + '</button>' : '') + (x.go ? '<button class="btn sm" data-a="asgo" data-r="' + x.go + '" data-ct="' + E(x.ct) + '">Xem</button>' : '') + '</div></div>'; }).join('') : '<div class="as-i"><span class="as-d ok"></span><div class="m">Chưa thấy thiếu nghiệp vụ nào ở mục này.</div></div>') + '</div></div>';
+  } else if (as.bubble) h += '<div class="as-bub" data-a="asopen" role="status">' + E(as.bubble) + '</div>';
+  h += '<button class="as-fab' + (total ? '' : ' as-ok') + '" data-a="asopen" aria-label="Trợ lý nhắc việc: ' + total + ' việc cần xem" title="Trợ lý nhắc việc">' + ICON + (total ? '<span class="as-badge">' + total + '</span>' : '') + '</button>';
+  root.innerHTML = h;
+};
+let tm = 0; as.sched = () => { clearTimeout(tm); tm = setTimeout(() => {
+  try { const r = as.compute(), sig = r.lan.filter(x => x.sev !== 'ok' && x.sev !== 'info').map(x => x.msg).join('|'); if (as._lan !== null && sig && sig !== as._lan && !as.open) { as.bubble = r.lan.find(x => x.sev === 'warn' || x.sev === 'err').msg; setTimeout(() => { as.bubble = ''; as.paint(); }, 8000); } as._lan = sig; } catch (e) { }
+  as.paint(); }, 200); };
+UI.act.asopen = () => { as.open = !as.open; as.bubble = ''; if (as.open && !cnt(as.compute(), as.tab)) { const t = TABS.find(x => cnt(as.compute(), x[0])); if (t) as.tab = t[0]; } as.paint(); };
+UI.act.astab = el => { as.tab = el.dataset.k; as.paint(); };
+UI.act.asgo = el => { as.open = false; const rt = el.dataset.r, ct = el.dataset.ct; if (rt === 'ps') UI.ps = Object.assign(UI.ps, { ym: '', q: ct || '', only: '', page: null }); UI.go(rt); as.paint(); };
+const r0 = UI.render; UI.render = function () { const x = r0.apply(this, arguments); as.sched(); return x; };
+KT.on(() => as.sched());
+as.sched();
 })(window);
 
 /* ===== KHỞI ĐỘNG ===== */
