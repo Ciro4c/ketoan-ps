@@ -1,5 +1,7 @@
-<!doctype html>
-<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kế toán PS</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"><style>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Kế toán PS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
 /* Bố cục: thanh điều hướng trái + vùng làm việc; số liệu căn phải, chữ số đều (tabular) */
 :root{
   --bg:#f3f5f4; --surface:#fff; --surface2:#f8faf9; --line:#dde3e0; --line2:#eaeeec;
@@ -124,7 +126,7 @@ table.t td.neg{color:var(--bad)}
 .modal.wide{width:1000px}
 .modal>header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
 .modal>header h2{flex:1}.modal>.bd{padding:14px 16px}.modal>footer{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
-.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:8px;z-index:90;box-shadow:var(--shadow)}
+.toast{position:fixed;bottom:18px;right:18px;max-width:min(520px,calc(100vw - 36px));background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:8px;z-index:90;box-shadow:var(--shadow)}
 .tpls{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
 .tpls button{text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 11px;cursor:pointer}
 .tpls button:hover{border-color:var(--accent);background:var(--accent-soft)}
@@ -159,7 +161,7 @@ table.t td.neg{color:var(--bad)}
 
 .brand{position:relative}.brand .dlapp{order:3;margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:15px;line-height:1;padding:0}.brand .dlapp:hover{background:rgba(255,255,255,.12)}
 
-</style></head><body>
+</style>
 <div id="app" class="app"></div>
 <script>
 /* ===== KẾ TOÁN PS — core: tiện ích, trạng thái, lưu trữ ===== */
@@ -175,10 +177,11 @@ KT.num = v => {
   if (typeof v === 'number') return isFinite(v) ? v : 0;
   if (v == null || v === '') return 0;
   let s = String(v).trim().replace(/\s/g, '').replace(/[đ₫]/gi, '');
+  let neg = false; if (/^\(.+\)$/.test(s)) { neg = true; s = s.slice(1, -1); }   // (1.234) = số âm kiểu kế toán
   if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
   else if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, '');
   else s = s.replace(',', '.');
-  const n = parseFloat(s); return isFinite(n) ? n : 0;
+  const n = parseFloat(s); return isFinite(n) ? (neg ? -n : n) : 0;
 };
 const grp = s => s.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 /** số tiền: 1.234.567 ; âm: -1.234 ; 0 → '' (dash=true → '-') */
@@ -1128,7 +1131,8 @@ R.b01 = (date, prevDate) => {
     for (const p of S.prepaids) { const tot = KT.num(p.gia), n = Math.max(1, +p.thang || 1), start = D.ym(p.tu || d); const el = Math.max(0, Math.min(n, D.monthsBetween(start, D.ym(d)) + (p.tu && p.tu <= d ? 1 : 0))); const rem = n - el; if (rem > 12) lt += tot / n * (rem - 12); }
     lt = Math.max(0, Math.min(lt, b242)); v[261] = lt; v[151] = b242 - lt;
     v[152] = Math.max(0, b('133'));
-    let t153 = 0; for (const a of ['3331', '3332', '3333', '3334', '3335', '3336', '3337', '3338', '3339']) { const x = b(a); if (x > 0) t153 += x; } v[153] = t153; v[154] = 0; v[155] = 0;
+    const T333 = ['3331', '3332', '3333', '3334', '3335', '3336', '3337', '3338', '3339'], r333 = b('333') - T333.reduce((q, a) => q + b(a), 0);   // r333: số ghi thẳng vào TK 333 tổng hợp (vẫn phải lên BCTC dù sai cách hạch toán)
+    let t153 = 0; for (const a of T333) { const x = b(a); if (x > 0) t153 += x; } if (r333 > 0) t153 += r333; v[153] = t153; v[154] = 0; v[155] = 0;
     v[211] = 0; v[212] = 0; v[213] = 0; v[214] = 0; v[215] = 0; v[216] = 0; v[219] = 0;
     v[222] = b('211'); v[223] = b('214') - b('2142') - b('2143') - b('2147'); v[225] = b('212'); v[226] = b('2142'); v[228] = b('213'); v[229] = b('2143'); v[231] = b('217'); v[232] = b('2147');
     v[241] = 0; v[242] = b('241'); v[251] = b('221'); v[252] = b('222'); v[253] = b('228'); v[254] = b('2292'); v[255] = 0;
@@ -1140,7 +1144,7 @@ R.b01 = (date, prevDate) => {
     v[100] = v[110] + v[120] + v[130] + v[140] + v[150]; v[200] = v[210] + v[220] + v[230] + v[240] + v[250] + v[260]; v[270] = v[100] + v[200];
     // nguồn vốn
     v[311] = posSum('331', -1); v[312] = posSum('131', -1);
-    let t313 = 0; for (const a of ['3331', '3332', '3333', '3334', '3335', '3336', '3337', '3338', '3339']) { const x = -b(a); if (x > 0) t313 += x; } v[313] = t313;
+    let t313 = 0; for (const a of T333) { const x = -b(a); if (x > 0) t313 += x; } if (-r333 > 0) t313 += -r333; v[313] = t313;
     v[314] = Math.max(0, -b('334')); v[315] = -b('335'); v[316] = -b('136') > 0 ? -b('136') : 0; v[317] = Math.max(0, -b('337')); v[318] = -b('3387');
     v[319] = -(b('338') - b('3387')) - b('332') - b('344'); v[320] = -(b('341') - b('34112')); v[321] = -b('352'); v[322] = -b('353'); v[323] = -b('357'); v[324] = 0;
     v[331] = 0; v[332] = 0; v[333] = 0; v[334] = 0; v[335] = 0; v[336] = 0; v[337] = 0; v[338] = -b('34112'); v[339] = -b('343'); v[340] = 0; v[341] = -b('347'); v[342] = 0; v[343] = -b('356');
@@ -1618,9 +1622,13 @@ T.cit = (year) => {
 T.monBai = (year) => {
   const S = KT.S, lg = S.legal.monBai; const von = KT.num(S.company.vonDieuLe);
   const muc = von > 10e9 ? lg.von10ty : lg.duoi10ty; const reg = S.company.ngayDangKy;
-  const mien = reg && D.year(reg) === year; const L = L_();
+  const auto = !!(reg && D.year(reg) === year); const L = L_();
+  const ov = (S.company.mbOv || {})[year] || {};                 // điều chỉnh của người dùng theo năm: { mien: 'yes'|'no'|'', ly, muc }
+  const mien = ov.mien === 'yes' ? true : ov.mien === 'no' ? false : auto;
+  const ly = ov.mien === 'yes' ? (ov.ly || 'Thuộc đối tượng được miễn') : (mien && auto ? 'Doanh nghiệp mới thành lập, miễn lệ phí môn bài năm đầu' : '');
+  const mucOv = ov.muc !== undefined && ov.muc !== '' && !isNaN(+ov.muc) ? +ov.muc : null;
   const paid = L.mov('3338', D.iso(year, 1, 1), D.iso(year, 12, 31), { counter: '11' }).n || L.mov('6425', D.iso(year, 1, 1), D.iso(year, 12, 31)).n;
-  return { year, muc: mien ? 0 : muc, mienNamDau: !!mien, hanNop: D.iso(year, 1, 30), paid, von };
+  return { year, muc: mien ? 0 : mucOv != null ? mucOv : muc, mucTheoVon: muc, mienNamDau: auto, mien, lyDo: ly, tuChinh: !!(ov.mien || mucOv != null), hanNop: D.iso(year, 1, 30), paid, von };
 };
 
 /* ---------- lịch nghĩa vụ ---------- */
@@ -1939,6 +1947,21 @@ A.closing = (from, to, label, opt) => {
   if (z > 0) stage('911', lnst, z, 'Kết chuyển lãi ' + label); else if (z < 0) stage(lnst, '911', -z, 'Kết chuyển lỗ ' + label);
   return { tag: A.tagOf('kc', from + '_' + to), lines: out, pnl };
 };
+/** Ghi nhận chi phí còn thiếu trước khi kết chuyển: khoản phải trả (334, 3382–3386, 3338) đã chi tiền nhưng chưa trích chi phí → dư Nợ.
+ *  Đề xuất Nợ chi phí / Có khoản phải trả, bằng đúng số dư Nợ cuối tháng (bỏ dòng của chính tag này để chạy lại không nhân đôi). */
+A.ACCR = [['334', null, 'tiền lương đã chi nhưng chưa trích chi phí lương'], ['3382', '642', 'kinh phí công đoàn đã nộp nhưng chưa trích'], ['3383', '642', 'BHXH đã nộp nhưng chưa trích'], ['3384', '642', 'BHYT đã nộp nhưng chưa trích'], ['3386', '642', 'BHTN đã nộp nhưng chưa trích'], ['3338', '6425', 'thuế, phí, lệ phí (môn bài…) đã nộp nhưng chưa ghi chi phí']];
+A.accrue = ym => {
+  const to = D.eom(ym), tag = A.tagOf('dc', ym), L = KT.compute(), own = A.lines(tag), out = []; const cn = 'DC' + to.slice(2, 4) + '-' + to.slice(5, 7);
+  const costOf334 = () => { const c = {}; KT.S.employees.forEach(e => { const k = e.tkChiPhi || '642'; c[k] = (c[k] || 0) + 1; }); return Object.keys(c).sort((a, b) => c[b] - c[a])[0] || '642'; };
+  for (const [acc, exp0, why] of A.ACCR) {
+    if (!KT.acc.has(acc)) continue;
+    const ownNet = own.reduce((x, l) => x + (String(l.no).startsWith(acc) ? l.st : 0) - (String(l.co).startsWith(acc) ? l.st : 0), 0);
+    const b = L.bal(acc, to) - ownNet; if (b < 1) continue;   // dư Nợ = đã chi nhiều hơn đã trích
+    let exp = exp0 || costOf334(); if (!KT.acc.has(exp)) exp = KT.acc.has(exp.slice(0, 3)) ? exp.slice(0, 3) : '642';
+    out.push(ln(cn, to, exp, acc, b, 'Ghi nhận chi phí ' + why + ' (TK ' + acc + ' đang dư Nợ ' + KT.f(b) + ')', {}));
+  }
+  return { tag, lines: out, note: 'Chỉ ghi nhận số dư Nợ của khoản phải trả. Nếu có bảng lương thì sinh “Lương, BHXH, thuế TNCN” trước, bút toán này sẽ tự gọn lại.' };
+};
 /** Khấu trừ thuế GTGT: Nợ 3331 / Có 133 */
 A.vatOffset = (perKey) => {
   const s = KT.tax.vatSeries(KT.compute().last || D.today()); const r = s.find(x => x.per.key === perKey); const tag = A.tagOf('gtgt', perKey); if (!r) return { tag, lines: [] };
@@ -1977,9 +2000,16 @@ const co = () => S().company;
 const wrap = h => '<div style="' + FONT + ';padding:18px;page-break-after:always">' + h + '</div>';
 const sign = (a, b, c) => '<table style="width:100%;margin-top:18px;border-collapse:collapse;text-align:center"><tr>' + [a, b, c].filter(Boolean).map(x => '<td style="vertical-align:top;padding:4px"><b>' + x[0] + '</b><br><i>' + (x[1] || '(Ký, họ tên)') + '</i><br><br><br><br>' + E(x[2] || '') + '</td>').join('') + '</tr></table>';
 const TT80 = 'Thông tư số 80/2021/TT-BTC';
-const lawName = () => TT80;
+const TT89 = 'Thông tư số 89/2026/TT-BTC';
+/** văn bản ban hành mẫu theo kỳ: từ 01/07/2026 là TT89/2026 (thay TT80/2021) */
+const lawName = (key, date) => (date && date >= '2026-07-01') ? TT89 : TT80;
+const NOTE89 = {
+  gtgt: 'Theo các nguồn tổng hợp, 01/GTGT mới có thêm chỉ tiêu [32b], [34a], đổi công thức [27]/[34] và tên một số chỉ tiêu ([06], [08], [11a], [23a], [24a], [32a]), bỏ [11b]. Bố cục dưới đây CHƯA cập nhật theo các thay đổi này — số liệu tổng hợp vẫn đúng, nhưng khi nộp cần chuyển sang đúng mẫu trên HTKK/eTax.',
+  tncn: 'Theo các nguồn tổng hợp, từ quý 3/2026 tờ khai 05/KK-TNCN kê khai theo quý và bổ sung chỉ tiêu mới. Bố cục dưới đây theo mẫu cũ — cần nhập lại trên HTKK theo mẫu hiện hành.',
+  _: 'Mẫu biểu có thể đã thay đổi từ 01/07/2026; bố cục dưới đây theo mẫu cũ, cần đối chiếu mẫu hiện hành.'
+};
 /** nhắc khi kỳ khai thuộc mẫu của thông tư mới hơn bố cục đang dựng */
-const stale = (key, date) => { const a = (S().legal[key] || {}).mauTK; const t = a ? KT.at(a, date).ten : ''; return t && !/80\/2021/.test(t) ? '<div style="border:1px dashed #b00;padding:4px 8px;margin:6px 0;font-size:12px;color:#b00"><i>Lưu ý: kỳ này thuộc mẫu theo ' + E(t) + '; bố cục dưới đây dựng theo ' + TT80 + ', cần đối chiếu mẫu hiện hành trước khi nộp.</i></div>' : ''; };
+const stale = (key, date) => { if (date && date >= '2026-07-01') return '<div style="border:1px dashed #b00;padding:4px 8px;margin:6px 0;font-size:12px;color:#b00"><i>Lưu ý: kỳ này thuộc mẫu theo ' + TT89 + ' (hiệu lực 01/07/2026). ' + (NOTE89[key] || NOTE89._) + ' Đối chiếu dựa trên nguồn tổng hợp, chưa đối chiếu với file PDF chính thức.</i></div>'; const a = (S().legal[key] || {}).mauTK; const t = a ? KT.at(a, date).ten : ''; return t && !/80\/2021/.test(t) ? '<div style="border:1px dashed #b00;padding:4px 8px;margin:6px 0;font-size:12px;color:#b00"><i>Lưu ý: kỳ này thuộc mẫu theo ' + E(t) + '; bố cục dưới đây dựng theo ' + TT80 + ', cần đối chiếu mẫu hiện hành trước khi nộp.</i></div>' : ''; };
 const nnt = () => { const c = co(); return '<table style="width:100%;border-collapse:collapse;margin:8px 0"><tr><td style="width:50%">[04] Tên người nộp thuế: <b>' + E(c.name) + '</b></td><td>[05] Mã số thuế: <b>' + E(c.mst || '') + '</b></td></tr><tr><td colspan="2">[06] Địa chỉ: ' + E(c.address || '') + '</td></tr><tr><td>[07] Quận/huyện: ................................</td><td>[08] Tỉnh/thành phố: ................................</td></tr><tr><td>[09] Điện thoại: ' + E(c.dienThoai || '') + '</td><td>[10] Fax: ....................  [11] E-mail: ' + E(c.email || '') + '</td></tr><tr><td>[12] Tên đại lý thuế (nếu có): ......................</td><td>[13] Mã số thuế: ....................</td></tr></table>'; };
 const banner = (mau, ban) => '<table style="width:100%"><tr><td style="width:55%"></td><td style="text-align:right"><b>Mẫu số: ' + mau + '</b><br><i style="font-size:12px">' + ban + '</i></td></tr></table><div style="text-align:center;margin-top:6px"><b>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</b><br><b><u>Độc lập – Tự do – Hạnh phúc</u></b></div>';
 const kyLabel = (kind, from) => { const m = +from.slice(5, 7), y = from.slice(0, 4); return kind === 'quy' ? 'Quý ' + Math.ceil(m / 3) + ' năm ' + y : kind === 'nam' ? 'Năm ' + y : 'Tháng ' + String(m).padStart(2, '0') + ' năm ' + y; };
@@ -2073,7 +2103,7 @@ F2.tncn = per => {
     ['[29]', 'Tổng số thuế thu nhập cá nhân đã khấu trừ ([29]=[30]+[31])', sum(ded, 'thue'), 0, 0, 1], ['[30]', 'Cá nhân cư trú', sum(dres, 'thue'), 0, 1], ['[31]', 'Cá nhân không cư trú', sum(dnon, 'thue'), 0, 1]];
   const ky = c.kyTNCN === 'quy' ? 'Quý ' + Math.ceil(+per.from.slice(5, 7) / 3) + ' năm ' + per.from.slice(0, 4) : 'Tháng ' + per.from.slice(5, 7) + ' năm ' + per.from.slice(0, 4);
   return wrap(banner('05/KK-TNCN', '(Ban hành kèm theo ' + (lawName('tncn', per.to) || 'Thông tư số 80/2021/TT-BTC') + ' của Bộ trưởng Bộ Tài chính)') +
-    '<h2 style="text-align:center;margin:12px 0 2px;font-size:19px">TỜ KHAI KHẤU TRỪ THUẾ THU NHẬP CÁ NHÂN</h2><div style="text-align:center"><i>(Dành cho tổ chức, cá nhân trả thu nhập từ tiền lương, tiền công)</i></div><div style="text-align:center;margin:6px 0">[01] Kỳ tính thuế: <b>' + ky + '</b> &nbsp; [02] Lần đầu: [X] &nbsp; [03] Bổ sung lần thứ: [ &nbsp;]</div>' + nnt() +
+    '<h2 style="text-align:center;margin:12px 0 2px;font-size:19px">TỜ KHAI KHẤU TRỪ THUẾ THU NHẬP CÁ NHÂN</h2><div style="text-align:center"><i>(Dành cho tổ chức, cá nhân trả thu nhập từ tiền lương, tiền công)</i></div>' + stale('tncn', per.to) + '<div style="text-align:center;margin:6px 0">[01] Kỳ tính thuế: <b>' + ky + '</b> &nbsp; [02] Lần đầu: [X] &nbsp; [03] Bổ sung lần thứ: [ &nbsp;]</div>' + nnt() +
     '<div style="text-align:right"><i>Đơn vị tiền: đồng Việt Nam</i></div><table style="width:100%;border-collapse:collapse"><thead><tr><th style="' + BC + ';width:44px">STT</th><th style="' + BC + '">Chỉ tiêu</th><th style="' + BC + ';width:70px">Mã chỉ tiêu</th><th style="' + BC + ';width:150px">Số người, số tiền</th></tr></thead><tbody>' +
     L.map((x, i) => '<tr><td style="' + BC + '">' + (x[4] ? '' : i + 1 - L.slice(0, i).filter(y => y[4]).length) + '</td><td style="' + B + (x[4] ? ';padding-left:24px' : '') + '">' + x[1] + '</td><td style="' + BC + '">' + x[0] + '</td><td style="' + BR + '">' + (x[3] ? KT.fq(x[2]) : f(x[2])) + '</td></tr>').join('') + '</tbody></table>' +
     '<p style="font-size:12px"><i>“Thuộc diện phải khấu trừ” tính cho người có thuế khấu trừ lớn hơn 0 trong kỳ; không cư trú theo cột Cư trú trong hồ sơ lao động. Các chỉ tiêu còn lại của mẫu (nếu có phát sinh) lập thêm trên HTKK.</i></p>' +
@@ -2091,8 +2121,8 @@ F2.monbai = year => {
     '<h2 style="text-align:center;margin:12px 0 2px;font-size:19px">TỜ KHAI LỆ PHÍ MÔN BÀI</h2><div style="text-align:center;margin:6px 0">[01] Kỳ tính thuế: Năm <b>' + year + '</b> &nbsp; [02] Lần đầu: [X] &nbsp; [03] Bổ sung lần thứ: [ &nbsp;]</div>' + nnt() +
     '<table style="width:100%;border-collapse:collapse;margin-top:8px"><thead><tr><th style="' + BC + '">Chỉ tiêu</th><th style="' + BC + ';width:200px">Giá trị</th></tr></thead><tbody>' +
     row('Ngày đăng ký thành lập / bắt đầu hoạt động', c.ngayDangKy ? D.fmt(c.ngayDangKy) : '') + row('Vốn điều lệ ghi trong đăng ký (đồng)', f(von)) +
-    row('Mức lệ phí môn bài theo quy định (đồng/năm): ' + (von > 10e9 ? 'vốn trên 10 tỷ đồng' : 'vốn từ 10 tỷ đồng trở xuống'), f(von > 10e9 ? KT.S.legal.monBai.von10ty : KT.S.legal.monBai.duoi10ty)) +
-    row('Miễn lệ phí năm đầu thành lập', m.mienNamDau ? 'Có' : 'Không') + '<tr><td style="' + BB + '">Số lệ phí môn bài phải nộp (đồng)</td><td style="' + BR + ';font-weight:700">' + f(m.muc) + '</td></tr>' +
+    row('Mức lệ phí môn bài theo quy định (đồng/năm): ' + (von > 10e9 ? 'vốn trên 10 tỷ đồng' : 'vốn từ 10 tỷ đồng trở xuống'), f(m.mucTheoVon)) +
+    row('Thuộc diện miễn lệ phí môn bài' + (m.mien ? ' (' + E(m.lyDo) + ')' : ''), m.mien ? 'Có' : 'Không') + '<tr><td style="' + BB + '">Số lệ phí môn bài phải nộp (đồng)</td><td style="' + BR + ';font-weight:700">' + f(m.muc) + '</td></tr>' +
     row('Hạn nộp tờ khai và nộp tiền', D.fmt(m.hanNop)) + row('Đã nộp theo sổ kế toán (đồng)', f(m.paid)) + '</tbody></table>' +
     '<p style="margin:8px 0 0">Tôi cam đoan số liệu khai trên là đúng và chịu trách nhiệm trước pháp luật về những số liệu đã khai./.</p>' + sign(['NHÂN VIÊN ĐẠI LÝ THUẾ', '', ''], ['NGƯỜI NỘP THUẾ hoặc ĐẠI DIỆN HỢP PHÁP', '(Ký, ghi rõ họ tên; chức vụ và đóng dấu (nếu có))', c.giamDoc]));
 };
@@ -2205,7 +2235,7 @@ KT.audit = () => {
     ms.forEach(l => { const t = KT.imp.norm(l.dg || ''); if (/(tra|chi|thanh toan) (tien )?luong/.test(t) && /^(6|154|241|242|627|622)/.test(l.no) && /^11/.test(l.co)) { add('warn', 'D22', 'Định khoản', 'Trả lương ghi thẳng Nợ ' + l.no + ' / Có ' + l.co + ' (' + f(l.st) + '), không qua TK 334 phải trả người lao động.', 'Ghi nhận lương: Nợ ' + l.no + ' / Có 334; khi trả: Nợ 334 / Có ' + l.co + '. Cần để lên sổ lương, quyết toán thuế TNCN và BHXH.', l); flagged.add(l.id); } });
     if (KT.sugAcc) ms.forEach(l => { if (String(l.dg || '').trim().length < 6 || l.no === l.co || /^133/.test(l.no) || /^3331/.test(l.co)) return; let s = ck.m.get(l.id + '|' + l.no + '|' + l.co + '|' + l.dg);
       if (s === undefined) { s = KT.sugAcc(Object.assign({}, l, { no: '', co: '' }), { self: l }) || null; ck.m.set(l.id + '|' + l.no + '|' + l.co + '|' + l.dg, s); }
-      if (!s || s.skip || !s.no || !s.co) return; const all = s.all || [s].concat(s.alts || []); const lead = all.find(x => (x.src === 'hx' && x.n >= 2) || x.src === 'rule' || x.src === 'lib'); if (!lead) return; s = lead;
+      if (!s || s.skip || !s.no || !s.co) return; const all = s.all || [s].concat(s.alts || []); const lead = all.find(x => (x.src === 'hx' && x.n >= 2) || x.src === 'rule' || x.src === 'lib'); if (!lead) return; s = lead; if (/^(chi|tra|thanh toan|mua|nop)\b/.test(KT.imp.norm(l.dg || '')) && /^(51|52|71)/.test(s.co)) return;   // diễn giải bắt đầu bằng chi/trả/mua: không phải doanh thu
       cashPair = /^11/.test(l.no) && /^11/.test(l.co); if (all.some(x => same(x.no, l.no) && same(x.co, l.co))) return;
       if (all.some(x => same(x.no, l.co) && same(x.co, l.no))) { add('err', 'D20', 'Định khoản', 'Có thể ghi ngược chiều: “' + String(l.dg).slice(0, 60) + '” ghi Nợ ' + l.no + ' / Có ' + l.co + ', theo nghiệp vụ phải là Nợ ' + s.no + ' / Có ' + s.co + '.', 'Đảo Nợ/Có nếu đúng là ghi ngược.', l); return; }
       if (!flagged.has(l.id)) add('warn', 'D21', 'Định khoản', '“' + String(l.dg).slice(0, 60) + '” ghi Nợ ' + l.no + ' / Có ' + l.co + ' nhưng ' + (s.src === 'hx' ? 'các lần trước bạn ghi' : s.src === 'lib' ? 'theo sơ đồ hạch toán thường ghi' : 'theo nghiệp vụ thường ghi') + ' Nợ ' + s.no + ' / Có ' + s.co + ' (' + s.why + ').', 'Sửa theo đề xuất nếu nhập nhầm; nếu đúng là trường hợp đặc biệt thì tick ✓ đã kiểm tra.', l);
@@ -2245,6 +2275,7 @@ KT.audit = () => {
     if (hasPay && !A.exists(A.tagOf('bl', m)) && !manM('334')) add('warn', 'T03', 'Thiếu bút toán', 'Tháng ' + mlab(m) + ' có bảng lương nhưng chưa có bút toán lương, bảo hiểm, thuế TNCN.', 'Vào Bút toán tự động, chọn tháng ' + m.slice(5) + ', bấm Xem trước rồi Ghi sổ ở mục Lương, BHXH, thuế TNCN.', null, 'tudong');
     try { if (!manM('214') && A.depreciation(m).lines.length && !A.exists(A.tagOf('kh', m))) add('warn', 'T04', 'Thiếu bút toán', 'Tháng ' + mlab(m) + ' có TSCĐ phải khấu hao nhưng chưa ghi bút toán khấu hao.', 'Vào Bút toán tự động, mục Khấu hao TSCĐ, bấm Xem trước rồi Ghi sổ.', null, 'tudong'); } catch (e) { }
     try { if (!manM('242') && A.prepaid(m).lines.length && !A.exists(A.tagOf('pb', m))) add('info', 'T05', 'Thiếu bút toán', 'Tháng ' + mlab(m) + ' có chi phí trả trước cần phân bổ nhưng chưa ghi.', 'Vào Bút toán tự động, mục Phân bổ chi phí chờ phân bổ.', null, 'tudong'); } catch (e) { }
+    try { const ac = A.accrue(m); ac.lines.forEach(l => add('warn', 'T10', 'Thiếu bút toán', 'Tháng ' + mlab(m) + ': ' + l.dg.replace(/^Ghi nhận chi phí /, 'có ').replace(/ \(TK/, ' (TK') + '. Phải ghi Nợ ' + l.no + ' / Có ' + l.co + ' trước khi kết chuyển 911, nếu không chi phí không vào kết quả kinh doanh.', 'Vào Bút toán tự động, mục Ghi nhận chi phí còn thiếu, bấm Xem trước rồi Ghi sổ (làm sau Lương, trước Kết chuyển 911).', null, 'tudong')); } catch (e) { }
     if (m !== last) { const kc = J.some(l => ym(l) === m && (has(l.no, '911') || has(l.co, '911'))); const act = J.some(l => ym(l) === m && has(l.co, '511') && !l.tag);
       if (act && !kc) add('info', 'T06', 'Thiếu bút toán', 'Tháng ' + mlab(m) + ' có doanh thu nhưng chưa kết chuyển xác định kết quả (911).', 'Cuối kỳ vào Bút toán tự động, mục Kết chuyển xác định kết quả (911). Làm sau khi đã ghi lương, khấu hao, phân bổ.', null, 'tudong'); } });
 
@@ -2281,7 +2312,7 @@ KT.audit = () => {
     });
   }
   // 3v. mua/bán chưa tách thuế GTGT (không có dòng thuế, chưa khai thuế suất)
-  if (KT.vatCand) { const hasV = j => J.some(x => x.vatOf === j.id) || J.some(x => x !== j && !x.vatOf && (D.parse(x.ng) || '') === (D.parse(j.ng) || '') && (/^133/.test(x.no) || /^3331/.test(x.co)) && ((j.ct && x.ct === j.ct) || (j.hd && x.hd === j.hd) || [.1, .08, .05].some(r => Math.abs(KT.num(x.st) - KT.rnd(KT.num(j.st) * r)) <= 1)));
+  if (KT.vatCand) { const hasV = j => J.some(x => x.vatOf === j.id) || J.some(x => x !== j && !x.vatOf && (D.parse(x.ng) || '') === (D.parse(j.ng) || '') && (/^133/.test(x.no) || /^(3331|333$)/.test(x.co)) && ((j.ct && x.ct === j.ct) || (j.hd && x.hd === j.hd) || [.1, .08, .05].some(r => Math.abs(KT.num(x.st) - KT.rnd(KT.num(j.st) * r)) <= 1)));
     J.forEach(j => { if (!KT.vatCand(j) || (j.thue != null && j.thue !== '' && KT.vatRate(j.thue) === 0) || hasV(j)) return; const out1 = KT.vatKind(j) === 'out';
       add(out1 ? 'warn' : 'info', 'T07', 'Thiếu bút toán', (out1 ? 'Bán ra' : 'Mua vào') + ' “' + String(j.dg || '').slice(0, 60) + '” ' + f(j.st) + ' chưa tách thuế GTGT' + (out1 ? ' (doanh thu chịu thuế phải có thuế đầu ra 3331)' : ' (nếu có hóa đơn GTGT thì được khấu trừ thuế đầu vào 133)') + '.', 'Chọn thuế suất và số tiền đã gồm thuế hay chưa; phần mềm tự thêm dòng thuế. Không có hóa đơn GTGT thì chọn “Không có hóa đơn”.', j); }); }
   // 3h. hóa đơn: trùng số bán ra, đầu vào rủi ro chưa xử lý thuế, đang chờ xử lý sai sót
@@ -2303,7 +2334,9 @@ KT.audit = () => {
   const KIND = { bl: 'lương, bảo hiểm, thuế TNCN', kh: 'khấu hao', pb: 'phân bổ chi phí trả trước', sx: 'kết chuyển chi phí sản xuất', gtgt: 'khấu trừ thuế GTGT', kc: 'kết chuyển 911', tndn: 'chi phí thuế TNDN' };
   const pair = l => String(l.no).slice(0, 3) + '/' + String(l.co).slice(0, 3);
   tags.forEach(tg => { const mt = /^auto-([a-z]+):/.exec(tg); if (!mt || !KIND[mt[1]]) return; const al = J.filter(l => l.tag === tg); if (!al.length) return;
-    const ms = new Set(al.map(ym)), mon = [...ms].filter(Boolean).map(mlab).join(', '), manIn = J.filter(l => !l.tag && ms.has(ym(l))), ps = new Set(al.map(pair)), hit = manIn.filter(l => ps.has(pair(l)));
+    const ms = new Set(al.map(ym)), mon = [...ms].filter(Boolean).map(mlab).join(', '), manIn = J.filter(l => !l.tag && ms.has(ym(l))), ps = new Set(al.map(pair)), aS = {}, mS = {}; al.forEach(l => { aS[pair(l)] = (aS[pair(l)] || 0) + Math.abs(KT.num(l.st)); }); manIn.forEach(l => { mS[pair(l)] = (mS[pair(l)] || 0) + Math.abs(KT.num(l.st)); });
+    /* chỉ coi là trùng khi số tiền hai bên tương đương; bút toán tự động chỉ bù phần chênh lệch nhỏ so với số nhập tay thì không phải trùng */
+    const hit = manIn.filter(l => ps.has(pair(l)) && aS[pair(l)] >= .5 * (mS[pair(l)] || 0));
     if (hit.length) { dupT.add(tg); add('warn', 'X08', 'Xung đột', 'Bút toán tự động ' + KIND[mt[1]] + ' tháng ' + mon + ' (' + (al[0].ct || '') + ', ' + al.length + ' dòng, ' + f(al.reduce((x, l) => x + KT.num(l.st), 0)) + ') trùng với ' + hit.length + ' dòng nhập tay cùng cặp tài khoản: số liệu đang bị ghi hai lần.', 'Giữ dòng nhập tay và bỏ bút toán tự động, hoặc thay các dòng nhập tay bằng bút toán tự động.', al[0], 'tudong'); Object.assign(out[out.length - 1], { tag: tg, hits: hit.map(l => l.id), kind: mt[1] }); }
     else if (!manIn.length) { dupT.add(tg); add('warn', 'X09', 'Xung đột', 'Bút toán tự động ' + KIND[mt[1]] + ' tháng ' + mon + ' (' + (al[0].ct || '') + ', ' + al.length + ' dòng) nằm ở tháng không có nghiệp vụ nhập tay nào, có thể sinh nhầm kỳ.', 'Bỏ bút toán tự động này nếu tháng đó doanh nghiệp chưa hoạt động.', al[0], 'tudong'); Object.assign(out[out.length - 1], { tag: tg, kind: mt[1] }); }
   });
@@ -2445,25 +2478,34 @@ imp.table = text => {
       if (!ok) { if (ci >= 0 || co >= 0) roles = roles.map(r => r === 'in' ? 'out' : r === 'out' ? 'in' : r); else autoFlip = true; dirNote = ' Chiều tiền vào/ra đã được tự xác định lại theo cột Số dư.'; hint2 = ''; }
       else dirNote = ' Chiều tiền vào/ra đã đối chiếu khớp với cột Số dư.'; }
   }
-  return { rows, head, roles, kind, bankView, bank: bk, autoFlip, hint: (ts ? 'Nhận dạng sao kê dạng chữ (copy từ PDF/trang web), đã gom mỗi giao dịch về một dòng. ' : '') + (bk ? 'Nhận dạng sổ phụ ' + bk + '. ' : kind === 'bank' ? 'Nhận dạng sổ phụ ngân hàng. ' : '') + (head >= 0 ? 'Dòng tiêu đề ở dòng ' + (head + 1) + '.' + hint2 + dirNote : solved ? 'Không có dòng tiêu đề; đã xác định cột Thu, Chi, Số dư bằng cách đối chiếu số dư từng dòng (' + solved.sc + ' dòng khớp).' : 'Không thấy dòng tiêu đề, phần mềm đoán theo nội dung từng cột. Hãy kiểm tra lại cột bên dưới.'), sig: imp.sig(rows, head) };
+  return { rows, head, roles, kind, bankView, bank: bk, autoFlip, hasBal: roles.includes('bal') || !!solved || bcol >= 0, noAcc: !roles.includes('du'), hint: (ts ? 'Nhận dạng sao kê dạng chữ (copy từ PDF/trang web), đã gom mỗi giao dịch về một dòng. ' : '') + (bk ? 'Nhận dạng sổ phụ ' + bk + '. ' : kind === 'bank' ? 'Nhận dạng sổ phụ ngân hàng. ' : '') + (head >= 0 ? 'Dòng tiêu đề ở dòng ' + (head + 1) + '.' + hint2 + dirNote : solved ? 'Không có dòng tiêu đề; đã xác định cột Thu, Chi, Số dư bằng cách đối chiếu số dư từng dòng (' + solved.sc + ' dòng khớp).' : 'Không thấy dòng tiêu đề, phần mềm đoán theo nội dung từng cột. Hãy kiểm tra lại cột bên dưới.'), sig: imp.sig(rows, head) };
 };
 
 /** Nhận bảng PS (TK Nợ, TK Có, Số tiền nằm liền nhau) dù người dùng chỉ copy một phần cột.
     Trả về độ lệch so với bố cục chuẩn C → W (TK Nợ ở chỉ số 9): 0 = đúng chuẩn, âm = copy từ cột sau C (thiếu cột đầu), dương = copy từ cột trước C (thừa cột đầu). Không nhận ra thì trả null. */
 const isAccCode = x => /^\d{3,5}$/.test(String(x || '').trim()) && (!KT.acc || !KT.acc.has || KT.acc.has(String(x).trim()));
 const isAmt = x => { const s = String(x == null ? '' : x).trim(); return /^[-–—]+$/.test(s) || num(s) !== 0; };
-imp.psShift = text => {
+imp.psShift = (text, force) => {
   const rows = String(text || '').replace(/\r/g, '').split('\n').filter(l => l.trim() && l.includes('\t')).map(l => l.split('\t'));
   if (!rows.length) return null; const cnt = {}; let ok = 0;
   rows.forEach(c => { for (let p = 0; p + 2 < c.length; p++) if (isAccCode(c[p]) && isAccCode(c[p + 1]) && isAmt(c[p + 2])) { cnt[p] = (cnt[p] || 0) + 1; ok++; break; } });
   if (!ok) return null; const best = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0];
-  return cnt[best] >= 1 && cnt[best] >= rows.length * .5 ? (+best) - 9 : null;
+  /* nhật ký chưa đủ 50% dòng khớp (nhiều dòng trống/tiêu đề) nhưng có cột TK Nợ – TK Có liền nhau thì vẫn là nhật ký, không phải sao kê */
+  const hdr = rows.some(c => c.some((x, i) => /^(tk\s*)?nợ$/i.test(String(x).trim()) && /^(tk\s*)?có$/i.test(String(c[i + 1] || '').trim())));
+  return cnt[best] >= 1 && (force || cnt[best] >= rows.length * .5 || (cnt[best] >= 3 && cnt[best] >= rows.length * .2) || hdr) ? (+best) - 9 : null;
 };
 imp.looksPS = text => imp.psShift(text) !== null;
 /** đưa văn bản PS bị lệch cột về đúng bố cục C → W */
-imp.alignPS = text => { const sh = imp.psShift(text); if (!sh) return text; return String(text).replace(/\r/g, '').split('\n').map(l => { if (!l.includes('\t')) return l; const c = l.split('\t'); return (sh > 0 ? c.slice(sh) : new Array(-sh).fill('').concat(c)).join('\t'); }).join('\n'); };
+imp.alignPS = (text, force) => { const sh = imp.psShift(text, force); if (!sh) return text; return String(text).replace(/\r/g, '').split('\n').map(l => { if (!l.includes('\t')) return l; const c = l.split('\t'); return (sh > 0 ? c.slice(sh) : new Array(-sh).fill('').concat(c)).join('\t'); }).join('\n'); };
 
 /** dựng bút toán. opt: {tk, flip}. Trả về mảng {i, ng, dg, ct, st, dir, dt, hd, du, use, dup} */
+/** đoán chiều thu/chi của dòng chưa định khoản và chỉ có một cột số tiền dương: theo đuôi/đầu mã chứng từ (-T thu, -C chi; PT/PC/BC/BN) rồi theo diễn giải. Trả { dir, why } hoặc null */
+imp.dirGuess = (ct, dg) => {
+  const c = String(ct || '').trim().toUpperCase(), t = nz(dg);
+  if (c) { if (/(^|[-_\/. ])(C|CHI)$|^(PC|BN|CHI)\d*([-_\/. ]|$)/.test(c)) return { dir: 'out', why: 'chiều chi theo mã chứng từ ' + ct }; if (/(^|[-_\/. ])(T|THU)$|^(PT|BC|THU)\d*([-_\/. ]|$)/.test(c)) return { dir: 'in', why: 'chiều thu theo mã chứng từ ' + ct }; }
+  if (/(^| )(tra luong|tra tien|thanh toan|chi |chi$|mua |nop |tam ung|hoan ung|phi |mua$)/.test(' ' + t + ' ')) return { dir: 'out', why: 'chiều chi theo diễn giải' };
+  if (/(^| )(thu |thu$|lai tien gui|lai nhap goc|khach tra|nhan tien|rut tien|gop von|ban hang|chuyen tien mat)/.test(' ' + t + ' ')) return { dir: 'in', why: 'chiều thu theo diễn giải' };
+  return null; };
 imp.build = (tbl, roles, opt) => {
   opt = opt || {}; const out = []; const col = r => roles.indexOf(r);
   const cg = (r, role) => { const c = roles.indexOf(role); return c >= 0 ? r[c] : ''; };
@@ -2473,10 +2515,10 @@ imp.build = (tbl, roles, opt) => {
     const ng = dateOf(cg(r, 'ng')); if (!ng) return;
     const first = nz(r.join(' ')); if (/^(tong|cong|so du|ton|total|opening|closing)/.test(nz(cg(r, 'dg') || r[1] || '')) ) return;
     let dg = dgCols.map(c => r[c]).filter(Boolean).join(' – ').replace(/\s+/g, ' ').trim(); const ref = cg(r, 'ref'); if (ref) dg += (dg ? ' ' : '') + '[' + ref + ']';
-    const mk = (st, dir) => { if (!st) return; if (opt.flip) dir = dir === 'in' ? 'out' : 'in'; out.push({ i, ng, dg, ct: cg(r, 'ct'), st: Math.round(Math.abs(st)), dir, dt: cg(r, 'dt'), hd: cg(r, 'hd'), du: String(cg(r, 'du') || '').replace(/\D/g, ''), use: true, dup: false }); };
+    const mk = (st, dir, dw) => { if (!st) return; if (opt.flip) dir = dir === 'in' ? 'out' : 'in'; if (opt.rowFlip && opt.rowFlip.has(i)) { dir = dir === 'in' ? 'out' : 'in'; dw = 'đã đảo chiều theo ý bạn'; } out.push({ i, dirWhy: dw || '', ng, dg, ct: cg(r, 'ct'), st: Math.round(Math.abs(st)), dir, dt: cg(r, 'dt'), hd: cg(r, 'hd'), du: String(cg(r, 'du') || '').replace(/\D/g, ''), use: true, dup: false }); };
     const a = num(cg(r, 'in')), b = num(cg(r, 'out'));
     if (col('in') >= 0 || col('out') >= 0) { mk(a < 0 ? -a : a, a < 0 ? 'out' : 'in'); mk(b < 0 ? -b : b, b < 0 ? 'in' : 'out'); }
-    else if (col('amt') >= 0) { const s = num(cg(r, 'amt')); const g = col('sgn') >= 0 ? nz(cg(r, 'sgn')) : ''; if (g) mk(s, /^(dr|d|debit|no|ghi no)$/.test(g) ? 'out' : 'in'); else mk(s, s >= 0 ? 'in' : 'out'); }
+    else if (col('amt') >= 0) { const s = num(cg(r, 'amt')); const g = col('sgn') >= 0 ? nz(cg(r, 'sgn')) : ''; if (g) mk(s, /^(dr|d|debit|no|ghi no)$/.test(g) ? 'out' : 'in'); else if (s < 0) mk(s, 'out'); else { const gu = tbl.hasBal ? null : imp.dirGuess(cg(r, 'ct'), dg); mk(s, gu ? gu.dir : 'in', gu ? gu.why : ''); } }
   });
   return out;
 };
@@ -2599,6 +2641,10 @@ KT.recon = (to, from) => {
 /* bên dư bình thường: N = Nợ (tài sản), C = Có (nguồn vốn); TK có thể dư cả hai bên (131, 331, 138, 338, 421, 333x, 141…) bỏ qua */
 const DEBIT = { 111: 'N', 112: 'N', 113: 'N', 121: 'N', 128: 'N', 133: 'N', 151: 'N', 152: 'N', 153: 'N', 154: 'N', 155: 'N', 156: 'N', 157: 'N', 158: 'N', 211: 'N', 212: 'N', 213: 'N', 214: 'C', 221: 'N', 222: 'N', 228: 'N', 242: 'N', 244: 'N', 334: 'C', 335: 'C', 341: 'C', 411: 'C', 3331: 'C' };
 
+/** năm cũ chưa đóng sổ mà đã có chứng từ của năm sau: trả về năm đầu tiên chưa đóng (hoặc 0) và danh sách năm */
+KT.yearGap = () => { const S = KT.S, ys = [...new Set(S.journal.filter(l => !l.tag && D.parse(l.ng)).map(l => +String(D.parse(l.ng)).slice(0, 4)))].sort(); if (ys.length < 2) return { y: 0, years: [], next: 0 };
+  const mx = ys[ys.length - 1], un = ys.filter(y => y < mx && !(S.closes || {})['Y:' + y] && !(S.archive || {})[y]); return { y: un[0] || 0, years: un, next: mx }; };
+
 /** áp dụng một điều chỉnh đề xuất; trả về mô tả hoặc '' */
 KT.recon.apply = (fx) => { const S = KT.S;
   if (fx.op === 'swapOpen') { const o = S.opening[fx.k]; if (!o) return ''; KT.snapshot(); const a = o.no; o.no = o.co; o.co = a; KT.logAct && KT.logAct('Đảo bên Nợ/Có số dư đầu kỳ TK ' + o.tk, 1, true); KT.touch(true); return 'Đã đảo bên Nợ/Có của số dư đầu kỳ TK ' + o.tk + '. Bấm Hoàn tác nếu không đúng.'; }
@@ -2610,11 +2656,26 @@ KT.audit = function () {
   const out = a1.apply(this, arguments);
   const L = KT.S.journal.length ? KT.compute() : null; if (!L || !L.last) return out;
   try { KT.recon().bad.forEach(c => out.push({ sev: /^R0[1-4]$|^R10$/.test(c.code) ? 'err' : 'warn', code: c.code, group: 'Đối chiếu số liệu', msg: c.name + ': lệch ' + f(Math.abs(c.diff)) + (c.a.l ? ' (' + c.a.l + ' ' + f(c.a.v) + ' ≠ ' + c.b.l + ' ' + f(c.b.v) + ')' : '') + '.', fix: (c.causes[0] || '') + (c.fixes[0] ? ' → ' + c.fixes[0].t : ''), id: '', ct: '', date: '', go: c.fixes[0] && c.fixes[0].go || '' })); } catch (e) { out.push({ sev: 'info', code: 'R00', group: 'Đối chiếu số liệu', msg: 'Không đối chiếu được: ' + e.message, fix: '', id: '', ct: '', date: '', go: '' }); }
+  /* Y01: đã sang năm mới mà năm cũ chưa đóng sổ */
+  try { const g = KT.yearGap(); g.years.forEach(y => out.push({ sev: 'warn', code: 'Y01', group: 'Kết sổ cuối năm', msg: 'Đã có chứng từ năm ' + (y + 1) + ' nhưng năm ' + y + ' chưa đóng sổ.', fix: 'Đóng sổ năm ' + y + ': chốt số dư 31/12/' + y + ' làm số dư đầu kỳ năm ' + (y + 1) + ', chuyển lợi nhuận 4212 sang 4211 ngày 01/01/' + (y + 1) + ', khóa sổ. Trước khi đóng, dò và bổ sung bút toán thiếu (kết chuyển 911, khấu hao, thuế TNDN quyết toán).', id: '', ct: '', date: y + '-12-31', go: 'khoaso' })); } catch (e) { }
   /* F01: lãi tiền gửi, lãi cho vay, cổ tức (TK 515) không chịu thuế GTGT: không được có dòng thuế đầu ra */
   const J = L.all, byCt = {}; J.forEach(l => { if (l.ct) (byCt[l.date + '|' + l.ct] = byCt[l.date + '|' + l.ct] || []).push(l); });
   const seen = new Set();
   J.forEach(l => { if (!/^515/.test(l.co || '') || !/^11/.test(l.no || '')) return; const g = byCt[l.date + '|' + l.ct] || [l]; const v = g.find(x => /^3331/.test(x.co || ''));
     if (v && !seen.has(l.ct)) { seen.add(l.ct); out.push({ sev: 'warn', code: 'F01', group: 'Thuế GTGT', msg: 'Chứng từ ' + l.ct + ': thu nhập tài chính (TK 515: lãi tiền gửi, lãi cho vay, cổ tức, chiết khấu thanh toán) có dòng thuế GTGT đầu ra (' + f(v.st) + ').', fix: 'Lãi tiền gửi ngân hàng không thuộc đối tượng chịu thuế GTGT (không xuất hóa đơn, không kê khai đầu ra): xóa dòng thuế, chỉ ghi Nợ 112 / Có 515. Phí dịch vụ ngân hàng mới có thuế GTGT (hóa đơn của ngân hàng, ghi Nợ 6428 và Nợ 1331).', id: v.id, ct: l.ct, date: l.date, go: 'ps' }); } });
+  /* ---- D20–D22, T11: lỗi định khoản thường gặp khi nhập từ bảng tính (mỗi lỗi có đề xuất sửa ở KT.fix) ---- */
+  const man = J.filter(l => !l.tag && l.id && l.no && l.co), nzv = t => KT.imp.norm(t || ''), mon = l => (l.ng || l.date || '').slice(0, 10);
+  man.forEach(l => { const t = nzv(l.dg), gv = /\b(gop von|von gop|gop tien)\b/.test(t), ft = /\bft\d{8,}/.test(t);
+    if ((gv && /^11[12]/.test(l.no) && /^11[12]/.test(l.co)) || (ft && /^112/.test(l.no) && /^111/.test(l.co))) { const vay = /\b(vay|muon)\b/.test(t), sg = vay ? (KT.acc.has('3411') ? '3411' : '341') : (KT.acc.has('4111') ? '4111' : '411');
+      out.push({ sev: 'warn', code: 'D30', group: 'Định khoản', msg: 'Ghi Nợ ' + l.no + ' / Có ' + l.co + ' ' + f(l.amt) + ': ' + (gv ? 'diễn giải là góp vốn' : 'tiền vào tài khoản ngân hàng kèm mã giao dịch ngân hàng, không phải chuyển từ quỹ tiền mặt') + ', đối ứng quỹ tiền mặt làm tiền mặt giảm sai.', fix: 'Góp vốn: Nợ 112 / Có 4111. Chủ sở hữu cho vay: Nợ 112 / Có 3411 (hoặc 3388). Khách trả nợ: Có 131. Chỉ ghi Có 111 khi thật sự rút tiền mặt gửi vào ngân hàng.', id: l.id, ct: l.ct, date: l.date, go: 'ps', sg }); } });
+  man.forEach(l => { if (l.no === '333' || l.co === '333') out.push({ sev: 'warn', code: 'D31', group: 'Định khoản', msg: 'Dùng TK 333 (tài khoản tổng hợp) với số tiền ' + f(l.amt) + ': tờ khai GTGT, TNDN, TNCN lấy số liệu theo tài khoản chi tiết nên số này sẽ không lên tờ khai.', fix: 'Thuế GTGT đầu ra ghi Có 33311, thuế TNDN Có 3334, TNCN Có 3335, môn bài và các khoản phí, lệ phí Có 3338.', id: l.id, ct: l.ct, date: l.date, go: 'ps', fld: l.no === '333' ? 'no' : 'co' }); });
+  man.forEach(l => { if (/^632/.test(l.no) && /^62[127]/.test(l.co) && num(l.amt)) out.push({ sev: 'warn', code: 'D32', group: 'Kết chuyển', msg: 'Kết chuyển ' + l.co + ' thẳng vào giá vốn 632 (' + f(l.amt) + '), bỏ qua TK 154.', fix: 'Chi phí NVL trực tiếp, nhân công trực tiếp, sản xuất chung (621, 622, 627) kết chuyển sang 154 để tính giá thành, rồi từ 154 sang 632 khi hoàn thành bán hàng/cung cấp dịch vụ. Đề xuất tách thành Nợ 154 / Có ' + l.co + ' và Nợ 632 / Có 154.', id: l.id, ct: l.ct, date: l.date, go: 'ps' }); });
+  /* T11: lương đã trả cho tháng X nhiều hơn lương đã trích của tháng X */
+  { const pay = {}, acc = {}, cp = {}, first = {}; const ym = l => (l.date || '').slice(0, 7);
+    J.forEach(l => { if (/^334/.test(l.co || '') && /^(154|241|62|64)/.test(l.no || '') && num(l.amt) > 0) { const k = ym(l); acc[k] = (acc[k] || 0) + num(l.amt); (cp[k] = cp[k] || {})[l.no] = ((cp[k] || {})[l.no] || 0) + 1; } });
+    man.forEach(l => { if (!(/^334/.test(l.no) && /^11[12]/.test(l.co)) || !(num(l.amt) > 0)) return; const t = nzv(l.dg); if (!/\bluong\b/.test(t)) return; const m = /(?:\bthang|\bt)\s*0?(\d{1,2})(?:\s*[\/\- ]\s*(20\d{2}))?/.exec(t); if (!m || +m[1] < 1 || +m[1] > 12) return; const y0 = +(l.date || '').slice(0, 4), m0 = +(l.date || '').slice(5, 7), mm = +m[1], yy = m[2] ? +m[2] : (mm > m0 ? y0 - 1 : y0), k = yy + '-' + String(mm).padStart(2, '0'); pay[k] = (pay[k] || 0) + num(l.amt); if (!first[k]) first[k] = l; });
+    Object.keys(pay).sort().forEach(k => { if (!acc[k]) return; const d = KT.rnd(pay[k] - acc[k]); if (d < 1) return; const c = Object.entries(cp[k] || {}).sort((a, b) => b[1] - a[1])[0], l = first[k];
+      out.push({ sev: 'warn', code: 'T11', group: 'Thiếu bút toán', msg: 'Lương tháng ' + k.slice(5) + '/' + k.slice(0, 4) + ': đã trả ' + f(pay[k]) + ' nhưng chỉ trích vào chi phí ' + f(acc[k]) + ' (thiếu ' + f(d) + '), TK 334 sẽ bị dư Nợ.', fix: 'Trích bổ sung Nợ ' + (c ? c[0] : '642') + ' / Có 334 ' + f(d) + ' ngày cuối tháng ' + k.slice(5) + '/' + k.slice(0, 4) + ', hoặc sửa lại số đã trích nếu bảng lương tháng đó khác.', id: l.id, ct: l.ct, date: l.date, go: 'ps', ym: k, exp: d, cpAcc: c ? c[0] : '642', paid: pay[k], accd: acc[k] }); }); }
   return out; };
 })(typeof globalThis !== 'undefined' ? globalThis : window);
 
@@ -2863,6 +2924,25 @@ ST.run = (opt) => { const s = S(), c = s.company, out = { dong: 0, thang: 0, dt:
   if (tien > 0 && opt.ng && opt.ten) { const ls = KT.tplBuild('gop_von', { ng: opt.ng, dt: ma, tien, tk: opt.tk || '112', dg: 'Góp vốn điều lệ – ' + opt.ten }); ls.forEach(l => { l.id = KT.newId(); s.journal.push(l); out.dong++; }); }
   if (opt.thang !== false) out.thang = ST.addScales();
   KT.logAct && KT.logAct('Khởi tạo công ty mới: ' + out.dong + ' bút toán góp vốn, ' + out.thang + ' thang lương đề xuất', out.dong + out.thang, true); KT.touch(); return out; };
+})(typeof globalThis !== 'undefined' ? globalThis : window);
+
+/* ===== MANG DỮ LIỆU SANG MÁY KHÁC =====
+   KT.portable.make(src, state)   từ mã nguồn trang (HTML) và dữ liệu → một file HTML duy nhất mang theo dữ liệu (thẻ <script id="ktps-seed">)
+   KT.portable.read(text)         đọc lại: nhận file sao lưu .json hoặc file HTML kèm dữ liệu → { data, t, n } hoặc ném lỗi
+   Mở file HTML kèm dữ liệu trên máy mới: phần mềm hỏi có nạp dữ liệu vào máy đó không (xem ui15.js). */
+(function (G) {
+'use strict';
+const KT = G.KT, P = KT.portable = {};
+const A = '<!--ktps' + '-seed-->', Z = '<!--/ktps' + '-seed-->';   // dấu mốc ghép từ hai mảnh để chính đoạn mã này không chứa dấu mốc
+const cut = t => { const i = t.indexOf(A), j = i < 0 ? -1 : t.indexOf(Z, i); return j < 0 ? null : [i, j + Z.length]; };
+P.make = (src, state) => { let base = String(src || ''); const c0 = cut(base); if (c0) base = base.slice(0, c0[0]) + base.slice(c0[1]).replace(/^\n/, ''); const i = base.indexOf('<script>'); if (i < 0) throw new Error('Không tìm thấy mã chương trình trong trang');
+  const seed = { t: new Date().toISOString(), n: (state.journal || []).length, name: (state.company || {}).name || '', data: state };
+  const js = JSON.stringify(seed).replace(/</g, '\\u003c').split(String.fromCharCode(0x2028)).join('\\u2028').split(String.fromCharCode(0x2029)).join('\\u2029');
+  return base.slice(0, i) + A + '<script type="application/json" id="ktps-seed">' + js + '<' + '/script>' + Z + '\n' + base.slice(i); };
+P.read = text => { text = String(text || ''); let seed;
+  if (/^\s*\{/.test(text)) { const s = JSON.parse(text); seed = s && s.data && s.t ? s : { t: '', n: (s.journal || []).length, name: (s.company || {}).name || '', data: s }; }
+  else { const c1 = cut(text); const m = c1 && /<script[^>]*>([^]*)<\/script>/.exec(text.slice(c1[0], c1[1])); if (!m) throw new Error('File không có dữ liệu kèm theo (không phải file sao lưu .json hoặc file HTML kèm dữ liệu)'); seed = JSON.parse(m[1]); }
+  if (!seed.data || !Array.isArray(seed.data.journal)) throw new Error('File không đúng định dạng dữ liệu kế toán'); return seed; };
 })(typeof globalThis !== 'undefined' ? globalThis : window);
 
 /* ===== Dữ liệu mẫu (công ty giả định, năm 2026) ===== */
@@ -3274,16 +3354,27 @@ UI.act.psxls = () => { const idx = psFiltered(); const J = S().journal; const ke
 
 /* ---------- dán từ Excel (cột C..W của sheet PS) ---------- */
 const PASTE_MAP = ['ct', null, 'ng', 'hd', 'nhd', 'lc', 'dn', 'dc', 'dg', 'no', 'co', 'st', 'vt', 'dh', 'dt', 'thue', null, 'sl', 'gia', 'nth', 'dvth'];
-const parsePaste = txt => {
-  if (KT.imp && KT.imp.alignPS) txt = KT.imp.alignPS(txt);   // copy thiếu cột đầu thì tự căn lại
+const parsePaste = (txt, force) => {
+  if (KT.imp && KT.imp.alignPS) txt = KT.imp.alignPS(txt, force);   // copy thiếu cột đầu thì tự căn lại
   const out = []; for (const line of txt.replace(/\r/g, '').split('\n')) {
     if (!line.trim()) continue; const c = line.split('\t'); const o = {};
     PASTE_MAP.forEach((k, i) => { if (k && c[i] != null && String(c[i]).trim() !== '') o[k] = String(c[i]).trim(); });
+    /* dòng không có ngày, chỉ một TK (hoặc ghi “… N154” / “… C334” cuối diễn giải) và có số tiền → số dư đầu kỳ, không phải bút toán phát sinh */
+    if (!D.parse(o.ng) && KT.num(o.st) > 0) { const mk = /(?:^|\s)([NC])\s?(\d{3,5})\s*$/.exec(o.dg || ''); let tk = '', sd = '';
+      if (mk && !o.no && !o.co) { sd = mk[1] === 'N' ? 'no' : 'co'; tk = mk[2]; o.dg = o.dg.replace(mk[0], '').trim(); }
+      else if (/^\d/.test(o.no || '') && !o.co) { sd = 'no'; tk = o.no; } else if (/^\d/.test(o.co || '') && !o.no) { sd = 'co'; tk = o.co; }
+      if (tk) { out.push({ _open: true, tk, side: sd, st: KT.num(o.st), dg: o.dg || '' }); continue; } }
     if (/^(tk\s*)?nợ$/i.test(o.no || '')) continue; if (o.no && !/^\d/.test(o.no)) continue; if (!o.no && !o.co && !(o.dg && KT.num(o.st) && D.parse(o.ng))) continue;
     o.ng = D.parse(o.ng) || ''; o.nhd = D.parse(o.nhd) || ''; o.st = KT.num(o.st); if (o.sl) o.sl = KT.num(o.sl); if (o.gia) o.gia = KT.num(o.gia);
     if (o.thue != null) { const t = String(o.thue).replace('%', '').trim(); o.thue = /^(kct|kkk)$/i.test(t) ? t.toUpperCase() : (KT.num(t) > 0 && KT.num(t) < 1 ? String(Math.round(KT.num(t) * 100)) : t); }
+    /* kết chuyển lãi/lỗ ghi số âm: Nợ 911 / Có 421 (-X) → Nợ 421 / Có 911 (X), cách ghi đúng khi lỗ */
+    if (o.st < 0 && /^(911|421)/.test(o.no || '') && /^(911|421)/.test(o.co || '') && o.no !== o.co) { const t = o.no; o.no = o.co; o.co = t; o.st = -o.st; o._sug = 'Số âm: đã đảo thành Nợ ' + o.no + ' / Có ' + o.co + ' số dương'; }
     out.push(o);
-  } return out;
+  }
+  /* dòng không có ngày: lấy ngày dòng liền trước; dòng kết chuyển / trích / phân bổ cuối kỳ lấy ngày cuối tháng của dòng liền trước */
+  let last = ''; const CLOSING = /kết chuyển|chi phí quản lý chung|chi phi quan ly chung|cuối (kỳ|tháng)|trích|phân bổ|khấu hao|ket chuyen/i;
+  for (const o of out) { if (o._open) continue; if (o.ng) { last = o.ng; continue; } if (!last) continue; const cl = CLOSING.test(o.dg || ''); o.ng = cl ? D.eom(last.slice(0, 7)) : last; o._sug = (o._sug ? o._sug + '; ' : '') + (cl ? 'Không có ngày: lấy cuối tháng của dòng liền trước' : 'Không có ngày: lấy ngày dòng liền trước'); }
+  return out;
 };
 UI.act.gonn = () => UI.go('nn');
 UI.parsePaste = parsePaste;
@@ -3541,7 +3632,7 @@ UI.route('ht', 'Công ty & hệ thống', 'Hệ thống', false, () => {
       '<div class="form" style="margin-top:12px"><label class="f"><span>Giảm thuế GTGT 8%: từ ngày</span><input data-c="lgd" data-p="gtgt.giam2.from" value="' + D.fmt(lg.gtgt.giam2.from) + '"></label><label class="f"><span>đến ngày</span><input data-c="lgd" data-p="gtgt.giam2.to" value="' + D.fmt(lg.gtgt.giam2.to) + '"></label></div><div class="row" style="margin-top:10px"><button class="btn" data-a="lgreset">Khôi phục toàn bộ tham số về mặc định</button></div></div>';
   } else if (tab === 'dulieu') {
     body = '<div class="card"><h2>Khóa sổ</h2><div class="row"><label class="f"><span>Khóa đến ngày</span><input data-c="lock" id="lockd" value="' + D.fmt(S().lockedUntil) + '" placeholder="dd/mm/yyyy" size="12"></label><span class="muted small" style="flex:1;min-width:240px">Dòng PS có ngày không sau ngày khóa thì không sửa, không xóa được. Khóa sau khi đã nộp tờ khai và chốt báo cáo. Mở khóa bằng cách xóa ô này.</span></div></div>' +
-      '<div class="card"><h2>Sao lưu và dữ liệu</h2><div class="notice ' + (si.mode === 'memory' ? 'warn ' : '') + 'small">' + (si.mode === 'db' ? 'Dữ liệu lưu trên cơ sở dữ liệu chung, mọi người được cấp quyền cùng thấy và cùng nhập. Vai trò của bạn: <b>' + E(KT.roleName()) + '</b>. Vẫn nên sao lưu file định kỳ.' : 'Dữ liệu lưu trong trình duyệt này (' + (si.mode === 'indexeddb' ? 'IndexedDB' : si.mode === 'localstorage' ? 'localStorage' : 'chỉ bộ nhớ tạm, sẽ mất khi đóng trang') + '). Xóa dữ liệu trình duyệt hoặc đổi máy mà chưa sao lưu sẽ mất dữ liệu.') + '</div><div class="row" style="margin-top:10px"><button class="btn pri" data-a="backup">Xuất file sao lưu (.json)</button><button class="btn" data-a="restore">Khôi phục từ file</button><button class="btn" data-a="demo">Nạp dữ liệu mẫu</button><button class="btn dng" data-a="clrdata">Xóa dữ liệu…</button></div><p class="muted small" style="margin-top:8px">Hiện có ' + S().journal.length + ' dòng PS, ' + S().partners.length + ' đối tượng, ' + S().items.length + ' mã hàng, ' + S().employees.length + ' nhân viên.</p><div id="snaps"></div></div>';
+      '<div class="card"><h2>Sao lưu và dữ liệu</h2><div class="notice ' + (si.mode === 'memory' ? 'warn ' : '') + 'small">' + (si.mode === 'db' ? 'Dữ liệu lưu trên cơ sở dữ liệu chung, mọi người được cấp quyền cùng thấy và cùng nhập. Vai trò của bạn: <b>' + E(KT.roleName()) + '</b>. Vẫn nên sao lưu file định kỳ.' : 'Dữ liệu lưu trong trình duyệt này (' + (si.mode === 'indexeddb' ? 'IndexedDB' : si.mode === 'localstorage' ? 'localStorage' : 'chỉ bộ nhớ tạm, sẽ mất khi đóng trang') + '). Xóa dữ liệu trình duyệt hoặc đổi máy mà chưa sao lưu sẽ mất dữ liệu.') + '</div><div class="row" style="margin-top:10px"><button class="btn pri" data-a="backup" title="Chỉ dữ liệu, nhỏ gọn">Xuất dữ liệu (.json)</button><button class="btn pri" data-a="dlbundle" title="Một file HTML duy nhất gồm cả chương trình và dữ liệu: chép sang máy khác, mở là có ngay">Xuất file HTML kèm dữ liệu</button><button class="btn" data-a="restore" title="Nhận file .json hoặc file HTML kèm dữ liệu">Nhập dữ liệu từ file</button><button class="btn" data-a="demo">Nạp dữ liệu mẫu</button><button class="btn dng" data-a="clrdata">Xóa dữ liệu…</button></div><p class="muted small" style="margin-top:8px">Hiện có ' + S().journal.length + ' dòng PS, ' + S().partners.length + ' đối tượng, ' + S().items.length + ' mã hàng, ' + S().employees.length + ' nhân viên.</p><div id="snaps"></div></div>';
   } else {
     body = '<div class="card"><h2>Giới hạn cần biết</h2><ul class="muted small" style="margin:0;padding-left:18px;display:grid;gap:5px"><li>Chỉ hạch toán đồng Việt Nam, chưa có ngoại tệ và chênh lệch tỷ giá.</li><li>Tờ khai: phần mềm tính số liệu từng chỉ tiêu và điền vào file XML xuất từ HTKK; chưa tạo XML từ đầu theo lược đồ chính thức, chưa có 01/KHBS. Cần đối chiếu mã chỉ tiêu với mẫu hiện hành (Thông tư 89/2026/TT-BTC) trước khi nộp.</li><li>Mã số các dòng B01, B02, B03 theo mẫu của file Excel cũ; đối chiếu với phụ lục Thông tư 99/2025/TT-BTC.</li><li>Thuyết minh B09 chỉ tạo các bảng số liệu, phần diễn giải do kế toán bổ sung.</li><li>Một máy, một người dùng; chưa có đăng nhập và phân quyền.</li><li>Chưa có: giá bán lẻ, chi phí chuẩn, doanh thu xây dựng theo tiến độ, thuế hoãn lại, hợp nhất.</li></ul></div>';
   }
@@ -3744,6 +3835,7 @@ const GENS0 = () => {
     { id: 'dep', t: 'Khấu hao TSCĐ', d: 'Khấu hao đường thẳng theo danh mục TSCĐ, từ tháng kế tiếp tháng đưa vào sử dụng.', tag: A.tagOf('kh', ym), run: () => A.depreciation(ym) },
     { id: 'pre', t: 'Phân bổ chi phí chờ phân bổ', d: 'Phân bổ đều chi phí trả trước (242) theo số tháng khai báo.', tag: A.tagOf('pb', ym), run: () => A.prepaid(ym) },
     { id: 'prod', t: 'Kết chuyển chi phí sản xuất, dịch vụ (154 → 632)', d: 'Gom 621, 622, 627 vào 154 theo đơn hàng (chi phí chưa gắn đơn hàng phân bổ theo chi phí trực tiếp). Đơn hàng Sản xuất giữ ở 154 đến khi nhập kho 155; đơn hàng Dịch vụ, Công trình chuyển giá vốn 632 khi có ngày hoàn thành hoặc khi ghi doanh thu có gắn mã; không gắn đơn hàng thì theo loại hình công ty.', tag: A.tagOf('sx', ym), run: () => A.production(ym) },
+    { id: 'accr', t: 'Ghi nhận chi phí còn thiếu (trước kết chuyển)', d: 'Khoản phải trả đã chi tiền nhưng chưa trích chi phí (vd. đã trả lương Nợ 334 mà chưa Nợ 642 / Có 334; BHXH, KPCĐ, môn bài). Làm sau lương, trước kết chuyển 911.', tag: A.tagOf('dc', ym), run: () => A.accrue(ym) },
     { id: 'vat', t: 'Khấu trừ thuế GTGT ' + vp.label, d: 'Nợ 3331 / Có 133 theo số được khấu trừ của kỳ khai.', tag: A.tagOf('gtgt', vk), run: () => A.vatOffset(vk) },
     { id: 'close', t: 'Kết chuyển xác định kết quả (911) – ' + p.label, d: 'Kết chuyển doanh thu, chi phí vào 911 và lãi/lỗ vào 421. Phần đã kết chuyển (nhập tay hoặc kỳ khác) được trừ ra, chỉ kết chuyển phần còn lại nên không chồng bút toán. Làm sau cùng, sau khi đã sinh các bút toán khác.', tag: A.tagOf('kc', p.from + '_' + p.to), run: () => A.closing(p.from, p.to, p.label.toLowerCase()) },
     { id: 'cit', t: 'Chi phí thuế TNDN năm ' + y, d: 'Nợ 8211 / Có 3334 theo số thuế TNDN quyết toán của năm.', tag: A.tagOf('tndn', String(y)), run: () => A.citExpense(y) }
@@ -3755,14 +3847,28 @@ const tdPick = p => { const J = S().journal, ms = [...new Set(J.filter(l => !l.t
   const st = m => J.some(l => String(D.parse(l.ng) || '').slice(0, 7) === m && (String(l.no).startsWith('911') || String(l.co).startsWith('911')));
   return '<div class="card" style="padding:10px 14px"><div class="row" style="gap:6px;flex-wrap:wrap;align-items:center"><b class="small">Chọn tháng có dữ liệu:</b>' + ms.slice(-12).map(m => '<button class="btn sm' + (m === cur && p.from.slice(0, 7) === cur ? ' pri' : '') + '" data-a="tdper" data-m="' + m + '" title="' + (st(m) ? 'Đã kết chuyển' : 'Chưa kết chuyển') + '">' + m.slice(5) + '/' + m.slice(0, 4) + (st(m) ? ' ✓' : '') + '</button>').join('') + '</div>' +
     (has ? '' : '<div class="notice warn small" style="margin-top:8px">Kỳ đang chọn (' + E(p.label) + ') không có nghiệp vụ nhập tay nào, nên bút toán tự động sẽ trống hoặc sinh nhầm kỳ. Bấm một tháng ở trên để chọn đúng kỳ cần chốt.</div>') + '</div>'; };
+/** kỳ đang chọn không có nghiệp vụ nhập tay → tự chuyển sang tháng PS đang xem, hoặc tháng gần nhất có dữ liệu (khỏi phải đổi tháng bằng tay) */
+const autoPer = () => { const p = UI.P(), J = S().journal; const mo = l => String(D.parse(l.ng) || '').slice(0, 7);
+  if (J.some(l => !l.tag && mo(l) && mo(l) >= p.from.slice(0, 7) && mo(l) <= p.to.slice(0, 7))) return false;
+  const ms = [...new Set(J.filter(l => !l.tag).map(mo).filter(Boolean))].sort(); if (!ms.length) return false;
+  const want = UI.ps && UI.ps.ym && ms.includes(UI.ps.ym) ? UI.ps.ym : ms[ms.length - 1]; const y = +want.slice(0, 4), m = +want.slice(5);
+  UI.per = { k: 'month', y, m, q: Math.ceil(m / 3), from: y + '-01-01', to: D.eom(want) }; return want; };
+/** đề xuất bút toán cuối kỳ còn thiếu (chi phí → 154, khấu hao, phân bổ, lương, GTGT, kết chuyển 911) */
+const propose = () => { const p = UI.P(); const out = [];
+  for (const g of GENS()) { if (g.id === 'cit' && p.to.slice(5, 7) !== '12') continue; let r; try { r = g.run(); } catch (e) { continue; } const n = r && r.lines ? r.lines.length : 0, have = A.lines(g.tag).length;
+    if (n && !have) out.push({ g, n, why: 'chưa sinh' }); else if (n && have && n !== have) out.push({ g, n, why: 'lệch so với dữ liệu hiện tại, nên sinh lại' }); }
+  return out; };
+UI.act.gen1 = el => UI.act.gen(el);
 UI.route('tudong', 'Bút toán tự động', 'Nhập liệu', true, () => {
-  const gs = GENS(); const p = UI.P();
+  const sw = autoPer(); const gs = GENS(); const p = UI.P(); const pr = propose();
   return '<div class="ph"><div><h1>Bút toán tự động cuối kỳ</h1><div class="sub">Chọn kỳ ở thanh trên (tháng nên chọn tháng cần chốt). Bút toán sinh ra nằm trong sổ PS với nền xám, sinh lại bao nhiêu lần cũng thay thế bản cũ.' + ((S().company || {}).autoSync === '0' ? ' Đang tắt tự điều chỉnh: sửa sổ PS xong cần sinh lại bằng tay.' : ' Đã sinh rồi thì khi sửa sổ PS, các bút toán này tự điều chỉnh theo (tắt ở Công ty và hệ thống → Cách hạch toán).') + '</div></div><span class="sp"></span><button class="btn pri" data-a="genall">Chạy tuần tự các bút toán của tháng</button></div>' +
+    (sw ? '<div class="notice small">Kỳ trước đó chưa có nghiệp vụ nên đã tự chuyển sang <b>' + E(p.label) + '</b> (tháng gần nhất có dữ liệu / tháng đang xem ở sổ PS). Đổi tháng ở các nút bên dưới nếu cần.</div>' : '') +
+    (pr.length ? '<div class="card" style="padding:10px 14px;border-color:var(--warn)"><div class="row" style="align-items:center"><b style="flex:1">Đề xuất cho ' + E(p.label) + ': còn ' + pr.length + ' bút toán cuối kỳ chưa có hoặc lệch</b><button class="btn sm pri" data-a="genall">Chạy tất cả theo thứ tự</button></div><ul class="small" style="margin:6px 0 0 18px">' + pr.map(x => '<li><b>' + E(x.g.t) + '</b>: ' + x.n + ' dòng, ' + x.why + ' <button class="btn sm" data-a="gen" data-id="' + x.g.id + '">Xem trước</button></li>').join('') + '</ul></div>' : '<div class="notice ok small">Kỳ ' + E(p.label) + ': không còn bút toán cuối kỳ nào cần đề xuất.</div>') +
     tdPick(p) + '<div class="grid g2">' + gs.map(g => { const n = A.lines(g.tag).length; return '<div class="card"><div class="row"><h2 style="flex:1">' + E(g.t) + '</h2><span class="pill ' + (n ? 'ok' : '') + '">' + (n ? 'Đã sinh ' + n + ' dòng' : 'Chưa sinh') + '</span></div><p class="muted small">' + E(g.d) + '</p><button class="btn" data-a="gen" data-id="' + g.id + '">Xem trước và áp dụng</button></div>'; }).join('') + '</div>';
 });
-UI.act.gen = el => { const g = GENS().find(x => x.id === el.dataset.id); const r = g.run(); r.title = g.t; UI.autoPrev(r); };
-UI.act.genall = () => UI.ask('Sinh lần lượt: lương, khấu hao, phân bổ, giá thành, khấu trừ GTGT, kết chuyển 911 cho kỳ đang chọn. Các bút toán cũ cùng kỳ sẽ được thay thế.', 'Chạy', () => {
-  const ids = ['pay', 'dep', 'pre', 'prod', 'vat', 'close']; let n = 0; for (const id of ids) { const g = GENS().find(x => x.id === id); const r = g.run(); if (r.lines.length) { A.apply(r.tag, r.lines); n += r.lines.length; } } UI.toast('Đã sinh ' + n + ' dòng bút toán'); });
+UI.act.gen = el => { if (autoPer()) UI.render(); const g = GENS().find(x => x.id === el.dataset.id); const r = g.run(); r.title = g.t; UI.autoPrev(r); };
+UI.act.genall = () => { autoPer(); UI.ask('Sinh lần lượt: lương, khấu hao, phân bổ, ghi nhận chi phí còn thiếu, giá thành, khấu trừ GTGT, kết chuyển 911 cho kỳ đang chọn. Các bút toán cũ cùng kỳ sẽ được thay thế.', 'Chạy', () => {
+  const ids = ['pay', 'dep', 'pre', 'accr', 'prod', 'vat', 'close']; let n = 0; for (const id of ids) { const g = GENS().find(x => x.id === id); const r = g.run(); if (r.lines.length) { A.apply(r.tag, r.lines); n += r.lines.length; } } UI.toast('Đã sinh ' + n + ' dòng bút toán'); }); };
 })(window);
 
 /* ===== GIAO DIỆN 4: sổ theo quy định, đăng ký chứng từ, xuất tờ khai, sao lưu ===== */
@@ -4699,11 +4805,11 @@ Object.keys(PR).forEach(k => { const r = UI.routes[k]; if (!r) return; const fn 
 (function (G) {
 'use strict';
 const KT = G.KT, UI = KT.ui, D = KT.d, E = KT.esc, $ = UI.$, S = () => KT.S, f = KT.f;
-const st = UI.imp = { text: '', tk: '', tkSet: false, flip: false, roles: null, tbl: null, list: [], ps: [], mode: '', bulk: '' };
+const st = UI.imp = { text: '', tk: '', tkSet: false, flip: false, roles: null, tbl: null, list: [], ps: [], mode: '', bulk: '', rowFlip: new Set() };
 const ROLE_OPTS = KT.imp.ROLES;
 
 const reparse = (keepRoles) => {
-  const t = st.text; st.ps = []; st.list = []; st.tbl = null; st.mode = '';
+  const t = st.text; st.rowFlip = new Set(); st.ps = []; st.list = []; st.tbl = null; st.mode = '';
   if (!t.trim()) return;
   if (KT.imp.looksPS(t)) { st.mode = 'ps'; st.ps = UI.parsePaste(t); return; }
   st.mode = 'tbl'; st.tbl = KT.imp.table(t); if (!keepRoles || !st.roles || st.roles.length !== st.tbl.roles.length) st.roles = st.tbl.roles.slice();
@@ -4713,28 +4819,30 @@ const reparse = (keepRoles) => {
   rebuild();
 };
 const rebuild = () => {
-  const o = { tk: st.tk, flip: st.flip }; st.list = KT.imp.build(st.tbl, st.roles, o);
-  st.list.forEach(e => { const g = KT.imp.suggest(e, o); e.du = e.du || g.du; e.dt = g.dt || e.dt; e.why = e.du && !g.du ? 'Từ cột TK đối ứng' : g.why; });
+  const o = { tk: st.tk, flip: st.flip, rowFlip: st.rowFlip }; st.list = KT.imp.build(st.tbl, st.roles, o);
+  st.list.forEach(e => { const g = KT.imp.suggest(e, o); e.du = e.du || g.du; e.dt = g.dt || e.dt; e.why = (e.du && !g.du ? 'Từ cột TK đối ứng' : g.why) + (e.dirWhy ? (g.why || (e.du && !g.du) ? ' · ' : '') + e.dirWhy : ''); });
   KT.imp.markDup(st.list, st.tk);
 };
 const sum = () => { const u = st.list.filter(e => e.use); const ok = u.filter(e => e.du && KT.acc.has(e.du)); return { n: ok.length, skip: u.length - ok.length, thu: ok.filter(e => e.dir === 'in').reduce((s, e) => s + e.st, 0), chi: ok.filter(e => e.dir === 'out').reduce((s, e) => s + e.st, 0), dup: st.list.filter(e => e.dup).length }; };
 
 const body = () => {
   if (!st.text.trim()) return GUIDE() + '<div class="notice small">Bấm vào ô trên và dán (Ctrl+V). Dán được: <b>sao kê ngân hàng</b> (Ghi nợ, Ghi có), <b>sổ quỹ tiền mặt</b> (Thu, Chi), danh sách thu chi bất kỳ có cột ngày, diễn giải, số tiền, hoặc <b>bảng PS chuẩn</b> của file kế toán cũ. Có dòng tiêu đề thì phần mềm tự nhận cột, không có thì tự đoán theo nội dung.</div>';
-  if (st.mode === 'ps') { const bad = st.ps.filter(x => !x.ng || !x.st || !KT.acc.has(x.no) || !KT.acc.has(x.co)).length, miss = st.ps.filter(x => !KT.acc.has(x.no) || !KT.acc.has(x.co)), sg = st.ps.filter(x => x._sug);
+  if (st.mode === 'ps') { const op = st.ps.filter(x => x._open), PS = st.ps.filter(x => !x._open); const opBox = op.length ? '<div class="notice ok small" style="margin-top:8px"><b>' + op.length + ' dòng số dư đầu kỳ</b> (không có ngày, chỉ một tài khoản) sẽ ghi vào <b>Số dư đầu kỳ</b>, không vào sổ PS: ' + op.map(x => E(x.tk) + (x.side === 'no' ? ' Nợ ' : ' Có ') + f(x.st)).join(' · ') + '. Nhập lại thì ghi đè, không cộng dồn.</div>' : ''; const bad = PS.filter(x => !x.ng || !x.st || !KT.acc.has(x.no) || !KT.acc.has(x.co)).length, miss = PS.filter(x => !KT.acc.has(x.no) || !KT.acc.has(x.co)), sg = PS.filter(x => x._sug);
     const sgBox = (miss.length || sg.length) ? '<div class="card" style="margin-top:8px;padding:10px"><div class="row" style="align-items:center"><b style="flex:1">' + (miss.length ? miss.length + ' dòng thiếu hoặc sai TK Nợ/TK Có' : 'Đã điền gợi ý định khoản') + '</b>' + (miss.length ? '<button class="btn sm pri" data-a="impsug">Điền gợi ý định khoản</button>' : '') + '</div>' + (sg.length ? '<div class="tw" style="max-height:30vh;margin-top:6px"><table class="t"><thead><tr><th>Ngày</th><th>Diễn giải</th><th>Nợ</th><th>Có</th><th class="r">Số tiền</th><th>Căn cứ</th></tr></thead><tbody>' + sg.slice(0, 80).map(x => '<tr><td class="nw">' + D.fmt(x.ng) + '</td><td>' + E(String(x.dg || '').slice(0, 60)) + '</td><td>' + E(x.no) + '</td><td>' + E(x.co) + '</td><td class="r">' + f(x.st) + '</td><td class="small muted">' + E(x._sug) + '</td></tr>').join('') + '</tbody></table></div><p class="small muted">Gợi ý được điền vào bảng dán; sau khi ghi vẫn sửa được ở Sổ PS.</p>' : '') + '</div>' : '';
-    return sgBox + '<div class="notice ok small">Nhận dạng: <b>bảng PS chuẩn</b> (cột C → W). Có ' + st.ps.length + ' dòng hợp lệ' + (bad ? ' · <span style="color:var(--warn)">' + bad + ' dòng có ngày, số tiền hoặc tài khoản chưa đúng, vẫn ghi, kiểm tra sau ở màn Kiểm tra dữ liệu</span>' : '') + '.</div>'; }
+    return opBox + sgBox + '<div class="notice ok small">Nhận dạng: <b>bảng PS chuẩn</b> (cột C → W). Có ' + PS.length + ' dòng hợp lệ' + (bad ? ' · <span style="color:var(--warn)">' + bad + ' dòng có ngày, số tiền hoặc tài khoản chưa đúng, vẫn ghi, kiểm tra sau ở màn Kiểm tra dữ liệu</span>' : '') + '.</div>'; }
   const t = st.tbl, w = t.roles.length, first = t.rows[Math.min(t.rows.length - 1, t.head + 1)] || [];
   const maps = Array.from({ length: w }, (_, c) => '<label class="f" style="min-width:130px"><span class="small muted" title="' + E(first[c] || '') + '">Cột ' + (c + 1) + (first[c] ? ': ' + E(String(first[c]).slice(0, 14)) : '') + '</span><select data-c="improle" data-i="' + c + '">' + ROLE_OPTS.map(r => '<option value="' + r[0] + '"' + (st.roles[c] === r[0] ? ' selected' : '') + '>' + r[1] + '</option>').join('') + '</select></label>').join('');
   const s = sum(), dl = '<datalist id="impdl">' + S().accounts.map(a => '<option value="' + E(a.code) + '">' + E(a.name) + '</option>').join('') + '</datalist><datalist id="impdt">' + S().partners.concat(S().employees).map(p => '<option value="' + E(p.code) + '">' + E(p.name) + '</option>').join('') + '</datalist>';
   const hasMoney = st.roles.some(r => r === 'in' || r === 'out' || r === 'amt'), hasDate = st.roles.includes('ng');
   const warn = !hasDate || !hasMoney ? '<div class="notice bad small">Chưa có cột <b>Ngày</b> hoặc cột <b>tiền</b>. Chọn lại vai trò cột ở phần “Cột trong bảng dán”.</div>' : '';
-  const rows = st.list.slice(0, 300).map((e, i) => { const okAcc = e.du && KT.acc.has(e.du); return '<tr data-i="' + i + '" class="' + (e.use ? '' : 'faint') + '"><td class="c"><input type="checkbox" data-c="impuse"' + (e.use ? ' checked' : '') + '></td><td class="nw">' + D.fmt(e.ng) + '</td><td title="' + E(e.dg) + '" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(e.dg) + '</td><td class="r">' + (e.dir === 'in' ? f(e.st) : '') + '</td><td class="r">' + (e.dir === 'out' ? f(e.st) : '') + '</td><td><input data-c="impf" data-k="du" list="impdl" size="7" value="' + E(e.du) + '" style="' + (okAcc ? '' : 'border-color:var(--bad)') + '"></td><td><input data-c="impf" data-k="dt" list="impdt" size="9" value="' + E(e.dt || '') + '"></td><td class="small muted">' + (e.dup ? '<span class="pill soon">Có thể đã nhập</span> ' : '') + E(e.why || (okAcc ? '' : 'Chọn TK đối ứng')) + '</td></tr>'; }).join('');
-  return dl + '<div class="muted small" style="margin:6px 0">' + (st.tpl ? '<b style="color:var(--ok)">Đã áp dụng mẫu đã lưu “' + E(st.tpl) + '”.</b> ' : '') + E(t.hint) + '</div>' + warn +
+  const rows = st.list.slice(0, 300).map((e, i) => { const okAcc = e.du && KT.acc.has(e.du); return '<tr data-i="' + i + '" class="' + (e.use ? '' : 'faint') + '"><td class="c"><input type="checkbox" data-c="impuse"' + (e.use ? ' checked' : '') + '></td><td class="nw">' + D.fmt(e.ng) + '</td><td title="' + E(e.dg) + '" style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(e.dg) + '</td><td class="r">' + (e.dir === 'in' ? f(e.st) : '') + '</td><td class="r">' + (e.dir === 'out' ? f(e.st) : '') + '</td><td class="c"><button class="btn sm" data-a="improwflip" title="Đảo chiều thu/chi của dòng này">⇄</button></td><td><input data-c="impf" data-k="du" list="impdl" size="7" value="' + E(e.du) + '" style="' + (okAcc ? '' : 'border-color:var(--bad)') + '"></td><td><input data-c="impf" data-k="dt" list="impdt" size="9" value="' + E(e.dt || '') + '"></td><td class="small muted">' + (e.dup ? '<span class="pill soon">Có thể đã nhập</span> ' : '') + E(e.why || (okAcc ? '' : 'Chọn TK đối ứng')) + '</td></tr>'; }).join('');
+  const jr = KT.imp.psShift(st.text, true) !== null ? '<div class="notice warn small" style="margin:6px 0">Bảng này có hai cột <b>TK Nợ – TK Có</b> liền nhau: có thể là <b>nhật ký đã định khoản</b>, không phải sao kê. <button class="btn sm pri" data-a="imppsmode">Đọc như nhật ký (bảng PS)</button></div>' : '';
+  const na = t.noAcc && !t.hasBal && st.roles.includes('amt') ? '<div class="notice small" style="margin:6px 0">Bảng <b>chưa định khoản</b> (chỉ có ngày, diễn giải, một cột số tiền): không phải sao kê. Phần mềm đoán chiều <b>thu/chi</b> theo mã chứng từ (đuôi -T là thu, -C là chi; PT, PC…) rồi theo diễn giải, sau đó đề xuất TK đối ứng. Dòng đoán sai thì bấm ⇄ để đảo; dòng chưa có TK đối ứng thì chọn tay hoặc gán hàng loạt.</div>' : '';
+  return jr + na + dl + '<div class="muted small" style="margin:6px 0">' + (st.tpl ? '<b style="color:var(--ok)">Đã áp dụng mẫu đã lưu “' + E(st.tpl) + '”.</b> ' : '') + E(t.hint) + '</div>' + warn +
     '<div class="row" style="gap:6px;margin:4px 0"><button class="btn sm" data-a="tplsave">Lưu cách đọc cột này thành mẫu</button>' + ((S().impTpl || []).length ? '<select data-c="tpluse"><option value="">Áp dụng mẫu đã lưu…</option>' + S().impTpl.map((x, k) => '<option value="' + k + '">' + E(x.name) + ' (' + x.roles.length + ' cột)</option>').join('') + '</select>' : '') + '</div>' +
     '<div class="row" style="margin:6px 0;align-items:flex-end"><label class="f">TK tiền<input data-c="impopt" data-k="tk" list="impdl" size="6" value="' + E(st.tk) + '"></label><label class="f" style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" data-c="impopt" data-k="flip"' + (st.flip ? ' checked' : '') + '> Đảo thu/chi</label><span class="sp"></span><label class="f">Gán TK đối ứng cho các dòng còn trống<input id="impbulk" list="impdl" size="7" placeholder="vd 642" value="' + E(st.bulk) + '"></label><button class="btn sm" data-a="impbulk">Áp dụng</button></div>' +
     '<details style="margin:6px 0"><summary class="small">Cột trong bảng dán (chỉnh nếu phần mềm nhận sai)</summary><div class="row" style="gap:8px;margin-top:6px">' + maps + '</div></details>' +
-    '<div class="tw" style="max-height:42vh"><table class="t"><thead><tr><th></th><th>Ngày</th><th>Diễn giải</th><th class="r">Thu</th><th class="r">Chi</th><th>TK đối ứng</th><th>Đối tượng</th><th>Gợi ý</th></tr></thead><tbody>' + (rows || '<tr><td colspan="8" class="muted" style="padding:14px">Không có dòng nào có ngày và số tiền hợp lệ.</td></tr>') + '</tbody></table></div>' +
+    '<div class="tw" style="max-height:42vh"><table class="t"><thead><tr><th></th><th>Ngày</th><th>Diễn giải</th><th class="r">Thu</th><th class="r">Chi</th><th title="Đảo thu/chi của từng dòng"></th><th>TK đối ứng</th><th>Đối tượng</th><th>Gợi ý</th></tr></thead><tbody>' + (rows || '<tr><td colspan="9" class="muted" style="padding:14px">Không có dòng nào có ngày và số tiền hợp lệ.</td></tr>') + '</tbody></table></div>' +
     '<div id="impsum" class="small" style="margin-top:6px">' + sumTxt() + '</div>';
 };
 const GUIDE = () => {
@@ -4772,7 +4880,7 @@ const sumTxt = () => { const s = sum(); return 'Sẽ ghi <b>' + s.n + '</b> ch�
 const paint = () => { const b = $('#impbody'); if (b) b.innerHTML = body(); const g = $('#impgo'); if (g) { const n = st.mode === 'ps' ? st.ps.length : sum().n; g.textContent = n ? 'Ghi ' + n + ' dòng vào sổ' : 'Ghi vào sổ'; g.disabled = !n; } };
 
 UI.act.paste = () => {
-  Object.assign(st, { text: '', tk: '112', tkSet: false, flip: false, roles: null, tbl: null, list: [], ps: [], mode: '', bulk: '' });
+  Object.assign(st, { text: '', tk: '112', tkSet: false, flip: false, roles: null, tbl: null, list: [], ps: [], mode: '', bulk: '', rowFlip: new Set() });
   UI.modal('Dán từ Excel, sao kê ngân hàng, sổ quỹ', '<div class="row" style="gap:6px;margin-bottom:6px;align-items:center"><span class="small muted" style="flex:1">Dán bảng Excel, sổ phụ / sao kê ngân hàng (Excel, PDF, trang web), sổ quỹ hoặc bảng PS.</span><button class="btn sm" data-a="impfile">Mở file .csv/.txt</button><button class="btn sm" data-a="impguide">Hướng dẫn cấu trúc</button></div><textarea id="impx" rows="6" style="width:100%" placeholder="Dán vào đây (Ctrl+V). Dán cả dòng tiêu đề nếu có."></textarea><div id="impbody">' + body() + '</div>', '<button class="btn" data-a="close">Hủy</button><button class="btn pri" id="impgo" data-a="impgo" disabled>Ghi vào sổ</button>', true);
   setTimeout(() => { const x = $('#impx'); if (x) x.focus(); }, 30);
 };
@@ -4784,8 +4892,12 @@ UI.chg.impuse = el => { const e = st.list[+el.closest('tr').dataset.i]; if (e) e
 UI.chg.impf = el => { const e = st.list[+el.closest('tr').dataset.i]; if (!e) return; e[el.dataset.k] = el.value.trim(); if (el.dataset.k === 'du') { el.style.borderColor = e.du && KT.acc.has(e.du) ? '' : 'var(--bad)'; } $('#impsum').innerHTML = sumTxt(); paint2(); };
 const paint2 = () => { const g = $('#impgo'); if (g) { const n = sum().n; g.textContent = n ? 'Ghi ' + n + ' dòng vào sổ' : 'Ghi vào sổ'; g.disabled = !n; } };
 UI.act.impbulk = () => { const v = ($('#impbulk') || {}).value.trim(); st.bulk = v; if (!v || !KT.acc.has(v)) { UI.toast('Tài khoản “' + v + '” không có trong hệ thống tài khoản'); return; } st.list.forEach(e => { if (!e.du) { e.du = v; e.why = 'Gán hàng loạt'; } }); paint(); };
+UI.act.improwflip = el => { const i = +el.closest('tr').dataset.i, e = st.list[i]; if (!e) return; if (!st.rowFlip) st.rowFlip = new Set(); if (st.rowFlip.has(e.i)) st.rowFlip.delete(e.i); else st.rowFlip.add(e.i); const keep = st.list.map(x => ({ du: x.du, dt: x.dt, use: x.use })); rebuild(); st.list.forEach((x, k) => { if (keep[k] && st.list[k].i !== e.i) { x.du = keep[k].du; x.dt = keep[k].dt; x.use = keep[k].use; } }); paint(); };
+UI.act.imppsmode = () => { st.mode = 'ps'; st.ps = UI.parsePaste(st.text, true); paint(); };
 UI.act.impgo = () => {
-  if (st.mode === 'ps') { const r = st.ps; if (!r.length) return; KT.snapshot(); r.forEach(o => { o.id = KT.newId(); delete o._sug; S().journal.push(o); }); const nv = KT.vatAfterImport ? KT.vatAfterImport(r) : 0; KT.touch(true); UI.closeModal(); UI.ps = Object.assign(UI.ps, { ym: '', q: '', only: '', page: null }); UI.render(); UI.toast('Đã ghi ' + r.length + ' dòng vào PS' + (nv ? ', tự trích thêm ' + nv + ' dòng thuế GTGT' : '')); return; }
+  if (st.mode === 'ps') { const all = st.ps, op = all.filter(x => x._open), r = all.filter(x => !x._open); if (!r.length && !op.length) return; KT.snapshot();
+    op.forEach(o => { const row = S().opening.find(x => String(x.tk) === o.tk && !x.dt && !x.vt && !x.auto); const v = KT.rnd(o.st); if (row) { row.no = o.side === 'no' ? v : 0; row.co = o.side === 'co' ? v : 0; } else S().opening.push({ tk: o.tk, dt: '', vt: '', sl: '', no: o.side === 'no' ? v : 0, co: o.side === 'co' ? v : 0 }); });
+    r.forEach(o => { o.id = KT.newId(); delete o._sug; S().journal.push(o); }); const nv = KT.vatAfterImport ? KT.vatAfterImport(r) : 0; KT.touch(true); UI.closeModal(); UI.ps = Object.assign(UI.ps, { ym: '', q: '', only: '', page: null }); UI.render(); UI.toast('Đã ghi ' + r.length + ' dòng vào PS' + (op.length ? ' và ' + op.length + ' dòng số dư đầu kỳ' : '') + (nv ? ', tự trích thêm ' + nv + ' dòng thuế GTGT' : '')); return; }
   const lines = KT.imp.toLines(st.list, { tk: st.tk }); if (!lines.length) { UI.toast('Chưa có dòng nào đủ thông tin để ghi'); return; }
   KT.snapshot(); lines.forEach(l => { l.id = KT.newId(); S().journal.push(l); }); KT.touch(true); const sk = sum().skip; UI.closeModal(); UI.ps = Object.assign(UI.ps, { ym: '', q: '', only: '', page: null }); UI.render(); UI.toast('Đã ghi ' + lines.length + ' chứng từ' + (sk ? ', bỏ qua ' + sk + ' dòng chưa có TK đối ứng' : '') + '. Soát lại ở màn Kiểm tra dữ liệu.');
 };
@@ -4864,8 +4976,9 @@ UI.act.psadd = () => { const J = S().journal, l = J[J.length - 1] || {}, c = KT.
 const snap0 = KT.snapshot; KT.snapshot = function () { KT._snapAt = Date.now(); return snap0.apply(this, arguments); };
 let tt;
 UI.toast = m => { let t = $('.toast'); if (!t) { t = document.createElement('div'); t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
-  const can = KT.canUndo() && Date.now() - (KT._snapAt || 0) < 2500; t.innerHTML = '<span>' + E(m) + '</span>' + (can ? ' <button class="btn sm" data-a="undo" style="margin-left:10px">↶ Hoàn tác</button>' : '');
-  clearTimeout(tt); tt = setTimeout(() => t.remove(), can ? 9000 : 3200); };
+  const can = KT.canUndo() && Date.now() - (KT._snapAt || 0) < 2500; t.innerHTML = '<span>' + E(m) + '</span>' + (can ? ' <button class="btn sm" data-a="undo" style="margin-left:10px">↶ Hoàn tác</button>' : '') + ' <button class="btn sm" data-a="toastx" aria-label="Đóng thông báo" title="Đóng" style="margin-left:6px;padding:0 7px">✕</button>';
+  clearTimeout(tt); tt = setTimeout(() => t.remove(), can ? 7000 : 3200); };
+UI.act.toastx = () => { const t = $('.toast'); if (t) t.remove(); };
 document.addEventListener('keydown', e => { if (!(e.ctrlKey || e.metaKey) || e.shiftKey || (e.key !== 'z' && e.key !== 'Z')) return; const t = e.target; if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return; e.preventDefault(); UI.act.undo(); });
 
 /* ---------- Gợi ý số hóa đơn, ký hiệu ---------- */
@@ -4931,6 +5044,50 @@ UI.act.starter = () => { const o = st(), sc = KT.starter.scales(o.vung);
 UI.chg.stf = el => { const k = el.dataset.k; st()[k] = el.type === 'checkbox' ? el.checked : el.value; if (k === 'vung') UI.act.starter(); };
 UI.act.stgo = () => { const o = st(); if (KT.num(o.daGop) > 0 && (!o.ten.trim() || !D.parse(o.ng))) { UI.toast('Muốn ghi bút toán góp vốn, nhập tên người góp vốn và ngày góp'); return; }
   const r = KT.starter.run(o); UI.closeModal(); UI.render(); UI.toast('Đã khởi tạo: ' + r.dong + ' bút toán góp vốn, ' + r.thang + ' thang lương, ' + r.dt + ' chủ sở hữu.'); };
+})(window);
+
+/* ===== GIAO DIỆN 15: đề nghị kết sổ khi sang năm, điều chỉnh môn bài, mang dữ liệu sang máy khác =====
+   - Thanh đề nghị đóng sổ năm cũ (KT.yearGap) hiện ở mọi màn hình khi đã có chứng từ năm sau
+   - Thẻ “Điều chỉnh theo năm” ở màn hình Lệ phí môn bài: miễn, lý do, mức riêng (tax.js: T.monBai)
+   - Sao lưu, khôi phục; file HTML kèm dữ liệu (portable.js) tự hỏi nạp khi mở trên máy mới */
+(function (G) {
+'use strict';
+const KT = G.KT, UI = KT.ui, D = KT.d, E = KT.esc, $ = UI.$, S = () => KT.S, f = KT.f;
+
+/* ---------- đề nghị kết sổ ---------- */
+const render0 = UI.render;
+UI.render = function () { const r = render0.apply(this, arguments);
+  try { const old = document.getElementById('yrbn'); if (old) old.remove(); const g = KT.yearGap(), pg = document.getElementById('page');
+    if (g.y && pg && UI.at !== 'khoaso' && UI._yrx !== g.y) { const d = document.createElement('div'); d.id = 'yrbn'; d.className = 'notice warn'; d.style.margin = '0 0 10px';
+      d.innerHTML = '<div class="row" style="align-items:center;gap:8px"><div style="flex:1"><b>Đã có chứng từ năm ' + (g.y + 1) + ', năm ' + g.y + ' chưa đóng sổ.</b> <span class="small">Đóng sổ chốt số dư 31/12/' + g.y + ' làm số dư đầu kỳ năm ' + (g.y + 1) + ', tự chuyển lợi nhuận năm nay (4212) sang năm trước (4211) ngày 01/01/' + (g.y + 1) + ' và khóa sổ. Nên dò bổ sung bút toán thiếu (kết chuyển, khấu hao, thuế TNDN) trước.</span></div>' +
+        '<button class="btn sm" data-a="fillmiss">Dò bút toán thiếu</button><button class="btn sm pri" data-a="cyopen" data-y="' + g.y + '">Đóng sổ năm ' + g.y + '</button><button class="btn sm" data-a="yrx" data-y="' + g.y + '" title="Ẩn đến khi mở lại phần mềm">Để sau</button></div>'; pg.insertBefore(d, pg.firstChild); } } catch (e) { }
+  return r; };
+UI.act.yrx = el => { UI._yrx = +el.dataset.y; const d = document.getElementById('yrbn'); if (d) d.remove(); };
+
+/* ---------- điều chỉnh môn bài ---------- */
+const mb0 = UI.routes.monbai.fn;
+UI.routes.monbai.fn = () => { const y = UI.sub.mbY || +(KT.compute().last || D.today()).slice(0, 4), m = KT.tax.monBai(y), ov = (S().company.mbOv || {})[y] || {};
+  const card = '<div class="card"><h2>Điều chỉnh theo năm ' + y + '</h2><div class="muted small" style="margin:2px 0 8px">Phần mềm tự miễn năm đầu thành lập theo ngày đăng ký và tính mức theo vốn điều lệ. Có trường hợp khác (hộ kinh doanh, chi nhánh, đối tượng được miễn theo quy định, mức đã được cơ quan thuế xác định khác) thì chỉnh ở đây; tờ khai 01/MBAI, lịch nghĩa vụ và nhắc việc đều đổi theo.</div>' +
+    '<div class="grid g3"><label class="f">Miễn lệ phí<select data-c="mbov" data-k="mien"><option value=""' + (!ov.mien ? ' selected' : '') + '>Tự động (miễn năm đầu theo ngày đăng ký)</option><option value="yes"' + (ov.mien === 'yes' ? ' selected' : '') + '>Được miễn năm này</option><option value="no"' + (ov.mien === 'no' ? ' selected' : '') + '>Không được miễn, phải nộp</option></select></label>' +
+    '<label class="f">Lý do miễn<input data-c="mbov" data-k="ly" value="' + E(ov.ly || '') + '" placeholder="vd: hộ kinh doanh doanh thu dưới ngưỡng, đơn vị sự nghiệp…"></label><label class="f">Mức nộp riêng (đồng, để trống = theo vốn)<input class="num" data-c="mbov" data-k="muc" value="' + E(ov.muc === undefined ? '' : ov.muc) + '" placeholder="' + f(m.mucTheoVon) + '"></label></div>' +
+    '<div class="small" style="margin-top:8px">' + (m.mien ? '<b>Năm ' + y + ' được miễn</b>: ' + E(m.lyDo) + '. Số phải nộp 0 đồng.' : '<b>Phải nộp ' + f(m.muc) + ' đồng</b>' + (m.muc !== m.mucTheoVon ? ' (mức riêng, theo vốn là ' + f(m.mucTheoVon) + ')' : ' theo vốn điều lệ ' + f(m.von) + '.')) + (m.tuChinh ? ' <span class="pill warn">Đã điều chỉnh tay</span> <button class="btn sm" data-a="mbclear">Về tự động</button>' : '') + '</div></div>';
+  return mb0().replace(/(<div class="card">)/, card + '$1'); };
+UI.chg.mbov = el => { const y = UI.sub.mbY || +(KT.compute().last || D.today()).slice(0, 4), c = S().company; c.mbOv = c.mbOv || {}; const o = c.mbOv[y] = c.mbOv[y] || {}; o[el.dataset.k] = el.value; if (el.dataset.k === 'muc' && el.value !== '') o.muc = KT.num(el.value); KT.snapshot(); KT.touch(true); UI.render(); };
+UI.act.mbclear = () => { const y = UI.sub.mbY || +(KT.compute().last || D.today()).slice(0, 4); KT.snapshot(); if (S().company.mbOv) delete S().company.mbOv[y]; KT.touch(true); UI.render(); };
+
+/* ---------- mang dữ liệu sang máy khác ---------- */
+UI.act.dlbundle = () => { if (!KT.pageSource) { UI.toast('Không tạo được file ở chế độ này.'); return; } let h; try { KT.saveNow && KT.saveNow(); h = KT.portable.make(KT.pageSource, KT.S); } catch (e) { UI.toast(e.message); return; }
+  UI.download('KeToanPS-' + (S().company.name || 'du-lieu').replace(/[^\wÀ-ỹ]+/g, '-').slice(0, 30) + '-' + D.today() + '.html', 'text/html', h); UI.toast('Đã tạo file HTML kèm dữ liệu. Chép sang máy khác, mở bằng Chrome, Edge hoặc Cốc Cốc, phần mềm sẽ hỏi có nạp dữ liệu không.'); };
+const apply = seed => { KT.setState(seed.data); KT.scheduleSave(); UI.initPer(); UI.go('dash'); };
+UI.act.restore = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.json,.html,.htm,application/json,text/html'; i.onchange = () => { const fl = i.files[0]; if (!fl) return; const r = new FileReader(); r.onload = () => { try { const sd = KT.portable.read(r.result);
+  UI.ask('Khôi phục dữ liệu từ file “' + fl.name + '” (' + sd.n + ' dòng sổ' + (sd.name ? ', ' + sd.name : '') + (sd.t ? ', xuất ' + sd.t.slice(0, 10) : '') + ')? Dữ liệu hiện tại trên máy sẽ được thay bằng dữ liệu trong file; hoàn tác được ngay sau đó.', 'Khôi phục', () => { KT.snapshot(); apply(sd); UI.closeModal(); UI.toast('Đã khôi phục dữ liệu'); }); } catch (e) { UI.toast(e.message); } }; r.readAsText(fl); }; i.click(); };
+/* file HTML kèm dữ liệu vừa được mở: hỏi nạp (một lần cho mỗi bản xuất) */
+setTimeout(() => { try { if (KT.dbMode) return; const el = document.getElementById('ktps-seed'); if (!el) return; const sd = JSON.parse(el.textContent); if (!sd || !sd.data) return; let done = ''; try { done = localStorage.getItem('ktps_seed') || ''; } catch (e) { }
+  if (done === sd.t) return; const empty = !KT.S.journal.length && !KT.S.opening.length; const mark = () => { try { localStorage.setItem('ktps_seed', sd.t); } catch (e) { } };
+  if (empty) { KT.snapshot(); apply(sd); mark(); UI.toast('Đã nạp dữ liệu kèm theo file (' + sd.n + ' dòng sổ).'); return; }
+  UI.modal('File này có kèm dữ liệu', '<p>File mang theo dữ liệu <b>' + E(sd.name || '') + '</b> (' + sd.n + ' dòng sổ, xuất ' + E((sd.t || '').slice(0, 16).replace('T', ' ')) + '). Máy này đang có dữ liệu riêng (' + KT.S.journal.length + ' dòng sổ).</p><p class="small muted">Nạp dữ liệu trong file sẽ thay dữ liệu hiện có trên máy này (hoàn tác được ngay sau đó bằng nút Hoàn tác). Giữ dữ liệu trên máy thì file này chỉ dùng làm chương trình.</p>', '<button class="btn" data-a="seedkeep">Giữ dữ liệu trên máy</button><button class="btn pri" data-a="seedload">Nạp dữ liệu trong file</button>'); UI._seed = sd; UI._seedMark = mark; } catch (e) { console.error(e); } }, 1200);
+UI.act.seedload = () => { KT.snapshot(); apply(UI._seed); UI._seedMark(); UI.closeModal(); UI.toast('Đã nạp dữ liệu kèm theo file'); };
+UI.act.seedkeep = () => { UI._seedMark(); UI.closeModal(); };
 })(window);
 
 /* ===== BỔ SUNG TỰ ĐỘNG: gợi ý số dư đầu kỳ và bút toán thiếu =====
@@ -5106,6 +5263,9 @@ const ctx = () => {
 };
 const fill_edits = () => KT.fill.missing().out.filter(e => e.type === 'edit');
 
+/** đọc số hóa đơn / ký hiệu ghi trong diễn giải: “(HD C26TDL-109)”, “HD C26TDL 109”, “HD dau ra so 2” → { kh, hd } hoặc null */
+fix.hdRef = dg => { const t = String(dg || ''); let m = /\bH[ĐD]\s*[:#]?\s*([1-9]?[CK]\d{2}[A-Z]{1,4})\s*[-\/ ]?\s*(\d{1,8})\b/i.exec(t); if (m) return { kh: m[1].toUpperCase(), hd: m[2].padStart(7, '0') };
+  m = /\bH[ĐD]\s*(?:đầu ra|dau ra|đầu vào|dau vao)?\s*(?:số|so)\s*(\d{1,8})\b/i.exec(t); return m ? { kh: '', hd: m[1].padStart(7, '0') } : null; };
 fix.propose = i => {
   const c = ctx(), j = i.id ? c.J.get(i.id) : null, nl = i.id ? c.N.get(i.id) : null; let p = null;
   if (i.code === 'E10' && i.p && nl) {
@@ -5125,9 +5285,22 @@ fix.propose = i => {
   } else if (i.code === 'E01' && i.acc && j) {
     let g = ''; for (let n = String(i.acc).length - 1; n >= 3; n--) if (KT.acc.has(i.acc.slice(0, n))) { g = i.acc.slice(0, n); break; }
     if (g) p = { key: 'A|' + i.id + '|' + i.fld, desc: 'TK ' + i.acc + ' chưa có trong hệ thống tài khoản; đề xuất dùng TK gần nhất (' + g + ' ' + KT.acc.name(g) + ')', fields: [{ k: 'acc', label: 'TK ' + (i.fld === 'no' ? 'Nợ' : 'Có'), value: g, list: 'fx-acc', w: 80 }], apply: v => { if (!KT.acc.has((v.acc || '').trim())) return 'Tài khoản không có trong hệ thống'; j[i.fld] = v.acc.trim(); return ''; } };
+  } else if (i.code === 'D30' && j && i.sg) {
+    p = { key: 'G|' + i.id, desc: 'Tiền góp vốn / chuyển vào ngân hàng không phải từ quỹ tiền mặt: đề xuất đổi TK Có ' + j.co + ' thành ' + i.sg + ' (' + (KT.acc.name ? KT.acc.name(i.sg) : '') + '). Nếu thật sự là rút tiền mặt gửi ngân hàng thì bỏ qua.', fields: [{ k: 'co', label: 'TK Có', value: i.sg, list: 'fx-acc', w: 80 }], apply: v => { const a = (v.co || '').trim(); if (!KT.acc.has(a)) return 'TK ' + a + ' chưa có trong hệ thống'; j.co = a; return ''; } };
+  } else if (i.code === 'D31' && j && i.fld) {
+    const t = nz(j.dg || ''), sg = /\b(tndn|thu nhap doanh nghiep)\b/.test(t) ? '3334' : /\btncn\b|thu nhap ca nhan/.test(t) ? '3335' : /mon bai|le phi|\bphi\b/.test(t) ? '3338' : KT.acc.has('33311') ? '33311' : '3331';
+    p = { key: 'V|' + i.id, desc: 'TK 333 là tài khoản tổng hợp; đề xuất ghi vào ' + sg + ' (' + (KT.acc.name ? KT.acc.name(sg) : '') + ') theo diễn giải.', fields: [{ k: 'acc', label: 'TK ' + (i.fld === 'no' ? 'Nợ' : 'Có'), value: sg, list: 'fx-acc', w: 80 }], apply: v => { const a = (v.acc || '').trim(); if (!KT.acc.has(a) || a === '333') return 'Chọn TK chi tiết của 333'; j[i.fld] = a; return ''; } };
+  } else if (i.code === 'D32' && j && num(j.st)) {
+    p = { key: 'K|' + i.id, desc: 'Tách thành Nợ 154 / Có ' + j.co + ' và Nợ 632 / Có 154 (cùng số tiền ' + f(j.st) + ', cùng ngày, cùng chứng từ).', fields: [], apply: () => { const k = S().journal.indexOf(j); if (k < 0) return 'Không tìm thấy dòng gốc'; const c = j.co; j.co = c; j.no = '154'; S().journal.splice(k + 1, 0, { id: KT.newId(), ct: j.ct, ng: j.ng, dg: String(j.dg || 'Kết chuyển giá vốn').replace(/^Ket chuyen gia von/i, 'Kết chuyển giá vốn từ 154'), no: '632', co: '154', st: j.st, dh: j.dh || '' }); return ''; } };
+  } else if (i.code === 'T11' && i.exp) {
+    p = { key: 'L|' + i.ym, desc: 'Trích bổ sung chi phí lương tháng ' + i.ym.slice(5) + '/' + i.ym.slice(0, 4) + ': Nợ ' + i.cpAcc + ' / Có 334, ngày cuối tháng (đã trả ' + f(i.paid) + ', đã trích ' + f(i.accd) + ').', fields: [{ k: 'amt', label: 'Số tiền', value: f(i.exp), w: 110 }, { k: 'tk', label: 'TK chi phí', value: i.cpAcc, list: 'fx-acc', w: 80 }], apply: v => { const a = KT.rnd(num(v.amt)), tk = (v.tk || '').trim(); if (!a) return 'Chưa nhập số tiền'; if (!KT.acc.has(tk)) return 'TK chi phí chưa có trong hệ thống'; S().journal.push({ id: KT.newId(), ct: 'TL' + i.ym.slice(2, 4) + '-' + i.ym.slice(5) + 'B', ng: D.eom(i.ym), dg: 'Trích bổ sung lương tháng ' + i.ym.slice(5) + '/' + i.ym.slice(0, 4), no: tk, co: '334', st: a }); return ''; } };
   } else if (i.code === 'E04' && j) {
-    const nb = S().journal.find(x => x.ct && x.ct === j.ct && x !== j && D.parse(x.ng)); const raw = String(j.ng || '').replace(/[T\s]+\d{1,2}:\d{2}.*$/, ''); const g = D.parse(raw) || (nb ? D.parse(nb.ng) : '');
-    if (g) p = { key: 'N|' + i.id, desc: 'Ngày chứng từ chưa hợp lệ; đề xuất ' + (D.parse(raw) ? 'chuẩn hóa lại' : 'lấy ngày của chứng từ ' + j.ct), fields: [{ k: 'ng', label: 'Ngày', value: D.fmt(g), w: 90 }], apply: v => { const d = D.parse(v.ng); if (!d) return 'Ngày không hợp lệ'; j.ng = d; return ''; } };
+    const raw = String(j.ng || '').replace(/[T\s]+\d{1,2}:\d{2}.*$/, '').trim(), JJ = S().journal, ix = JJ.indexOf(j);
+    const y2 = /^(\d{1,2})[-\/. ](\d{1,2})[-\/. ](\d{2})$/.exec(raw), dY2 = y2 ? D.parse(y2[1] + '/' + y2[2] + '/20' + y2[3]) : '';   // 28-02-26 → 28/02/2026
+    const nb = JJ.find(x => x.ct && x.ct === j.ct && x !== j && D.parse(x.ng)), prev = ix > 0 ? JJ.slice(0, ix).reverse().find(x => D.parse(x.ng)) : null, next = JJ.slice(ix + 1).find(x => D.parse(x.ng));
+    const g = D.parse(raw) || dY2 || (nb ? D.parse(nb.ng) : '') || (prev ? D.parse(prev.ng) : '') || (next ? D.parse(next.ng) : '') || D.today();
+    const why = D.parse(raw) ? 'chuẩn hóa lại' : dY2 ? 'đọc năm 2 chữ số (' + raw + ')' : nb ? 'lấy ngày của chứng từ ' + j.ct : prev ? 'lấy ngày của dòng liền trước (đang trống/sai: “' + raw + '”)' : next ? 'lấy ngày của dòng liền sau' : 'lấy ngày hôm nay';
+    p = { key: 'N|' + i.id, desc: 'Ngày chứng từ chưa hợp lệ; đề xuất ' + why + '. Kiểm tra lại cho đúng ngày thực tế.', fields: [{ k: 'ng', label: 'Ngày', value: D.fmt(g), w: 90 }], apply: v => { const d = D.parse(v.ng); if (!d) return 'Ngày không hợp lệ'; j.ng = d; return ''; } };
   } else if (i.code === 'E03' && j && c.miss.has(i.id)) {
     const e = c.miss.get(i.id); p = { key: 'M|' + i.id, desc: 'Kết chuyển chưa có số tiền; theo phát sinh thực tế của tháng là ' + e.now.no + '/' + e.now.co, fields: [{ k: 'amt', label: 'Số tiền', value: f(e.now.st), w: 120 }], apply: v => { j.no = e.now.no; j.co = e.now.co; j.st = KT.rnd(num(v.amt)); return ''; } };
   } else if (i.code === 'W14' && j && i.exp) {
@@ -5145,13 +5318,13 @@ fix.propose = i => {
     const ids = c.L.lines.filter(l => l.vk === i.ct && l.date === i.date).map(l => l.id);
     p = { key: 'C|' + i.ct + '|' + i.date, desc: 'Chi tiền mặt ≥ ngưỡng: đổi TK Có 111 thành 112 nếu thực tế đã chuyển khoản; chọn “Được trừ” nếu thuộc diện ngoại lệ' + (c.L.bal('112', i.date) > 0 ? '' : ' (ngân hàng chưa có số dư nên chưa điền sẵn)'), fields: [{ k: 'act', label: 'Cách xử lý', ty: 'sel', opts: [['', 'Chọn cách xử lý…'], ['tk', 'Đổi 111 → 112'], ['ok', 'Gắn nhãn Được trừ']], value: c.L.bal('112', i.date) >= (i.cash || 0) - 0.5 && c.L.bal('112', i.date) > 0 ? 'tk' : '' }],
       apply: v => { if (!v.act) return 'W13: chưa chọn cách xử lý (tài khoản ngân hàng không đủ số dư để đổi sang 112)'; const set = new Set(ids); let n = 0; S().journal.forEach(x => { if (!set.has(x.id)) return; if (v.act === 'ok') { if (/^(15|2[1-4]|6|8)/.test(x.no)) { x.tn = 'OK'; n++; } } else if (String(x.co).startsWith('111')) { x.co = '112' + String(x.co).slice(3); n++; } }); return n ? '' : 'Không tìm thấy dòng cần sửa'; } };
-  } else if (/^(T03|T04|T05|T06|X06)$/.test(i.code)) {
+  } else if (/^(T03|T04|T05|T06|T10|X06)$/.test(i.code)) {
     const mm = /[Tt]háng (\d{2})\/(\d{4})/.exec(i.msg || ''); const m = mm ? mm[2] + '-' + mm[1] : '';
-    const kind = { T03: 'bl', T04: 'kh', T05: 'pb', T06: 'kc' }[i.code] || (/lương/.test(i.msg) ? 'bl' : /khấu hao/.test(i.msg) ? 'kh' : 'pb');
-    const nm = { bl: 'lương, BHXH, thuế TNCN', kh: 'khấu hao TSCĐ', pb: 'phân bổ chi phí trả trước', kc: 'kết chuyển chi phí dịch vụ/sản xuất (154 → 632) và xác định kết quả (911)' }[kind];
+    const kind = { T03: 'bl', T04: 'kh', T05: 'pb', T06: 'kc', T10: 'dc' }[i.code] || (/lương/.test(i.msg) ? 'bl' : /khấu hao/.test(i.msg) ? 'kh' : 'pb');
+    const nm = { bl: 'lương, BHXH, thuế TNCN', kh: 'khấu hao TSCĐ', pb: 'phân bổ chi phí trả trước', kc: 'kết chuyển chi phí dịch vụ/sản xuất (154 → 632) và xác định kết quả (911)', dc: 'ghi nhận chi phí còn thiếu (khoản đã chi nhưng chưa trích chi phí)' }[kind];
     if (m) p = { key: 'G|' + kind + '|' + m, desc: (i.code === 'X06' ? 'Sinh lại' : 'Sinh') + ' bút toán tự động ' + nm + ' tháng ' + m.slice(5) + '/' + m.slice(0, 4) + ' theo dữ liệu hiện tại', fields: [],
       apply: () => { const A = KT.auto; if (kind === 'kc') { const pr = A.production(m), have = new Set(S().journal.filter(l => !l.tag && String(l.ng || '').slice(0, 7) === m).map(l => String(l.no).slice(0, 3) + '/' + String(l.co).slice(0, 3))), pl = pr.lines.filter(l => !have.has(String(l.no).slice(0, 3) + '/' + String(l.co).slice(0, 3))); if (pl.length) { A.apply(pr.tag, pl); KT.touch(true); } }
-        const r = kind === 'bl' ? A.payroll(m) : kind === 'kh' ? A.depreciation(m) : kind === 'pb' ? A.prepaid(m) : A.closing(D.bom(m), D.eom(m), 'tháng ' + m.slice(5)); if (!r.lines.length) return 'Không có số liệu để sinh ' + nm; A.apply(r.tag, r.lines); return ''; } };
+        const r = kind === 'bl' ? A.payroll(m) : kind === 'kh' ? A.depreciation(m) : kind === 'pb' ? A.prepaid(m) : kind === 'dc' ? A.accrue(m) : A.closing(D.bom(m), D.eom(m), 'tháng ' + m.slice(5)); if (!r.lines.length) return 'Không có số liệu để sinh ' + nm; A.apply(r.tag, r.lines); return ''; } };
   } else if (i.code === 'X10' && i.emp) {
     const e = S().employees.find(x => x.code === i.emp);
     if (e) p = { key: 'NVX|' + e.code, desc: 'Chuyển ' + e.code + ' thành đối tượng tập thể (không tính lương), sau đó sinh lại bút toán lương và kết chuyển của các tháng bị ảnh hưởng', fields: [{ k: 'act', label: 'Xử lý', ty: 'sel', opts: [['tap', 'Chuyển thành tập thể, sinh lại bút toán'], ['del', 'Xóa hẳn nhân viên, sinh lại bút toán']], value: 'tap' }],
@@ -5189,17 +5362,26 @@ fix.propose = i => {
     const tgt = j.vatOf ? (S().journal.find(x => x.id === j.vatOf) || j) : j;   // dòng thuế tự trích: sửa ở dòng hàng gốc rồi đồng bộ lại, kẻo bị ghi đè
     const sib = S().journal.filter(x => x !== j && x !== tgt && ((j.ct && x.ct === j.ct) || (j.dt && x.dt === j.dt)) && x.hd);
     const s1 = sib.find(x => x.ct === j.ct) || {}, s2 = sib.find(x => x.kh) || {};
-    const nhd = { k: 'nhd', label: 'Ngày HĐ', value: D.fmt(D.parse(j.nhd) || D.parse(j.ng) || ''), w: 90 }, kh = { k: 'kh', label: 'Ký hiệu', value: j.kh || s1.kh || s2.kh || '', w: 90 };
-    if (i.sev === 'warn') p = { key: 'H|' + i.id, desc: 'Điền số hóa đơn cho dòng thuế' + (s1.hd ? ' (lấy theo dòng cùng chứng từ)' : ''), fields: [{ k: 'hd', label: 'Số HĐ', value: s1.hd || '', w: 100 }, kh, nhd],
+    const isOut = (/^(3331|333$)/.test(j.co || '') || /^(511|711)/.test(tgt.co || '')) && !/^133/.test(tgt.no), sg = KT.invSuggest ? KT.invSuggest(isOut ? 'BAN' : 'MUA', tgt.dt || j.dt) : { hd: '', kh: '' }, yy = String(D.parse(j.nhd) || D.parse(j.ng) || D.today()).slice(2, 4);
+    const rf = (() => { const same = x => (D.parse(x.ng) || '') === (D.parse(j.ng) || ''); const cand = [tgt, j].concat(S().journal.filter(x => x !== j && x !== tgt && same(x) && !x.vatOf && ((j.ct && x.ct === j.ct) || [.05, .08, .1].some(r => Math.abs(num(x.st) * r - num(j.st)) <= 1)))); for (const x of cand) { const r = fix.hdRef(x.dg); if (r) return r; } return null; })();
+    const khMau = (rf && rf.kh) || j.kh || s1.kh || s2.kh || sg.kh || '1C' + yy + 'TAA', hdMau = (rf && rf.hd) || s1.hd || (isOut ? (sg.hd || '0000001') : '');
+    const nhd = { k: 'nhd', label: 'Ngày HĐ', value: D.fmt(D.parse(j.nhd) || D.parse(j.ng) || ''), w: 90 }, kh = { k: 'kh', label: 'Ký hiệu', value: khMau, w: 90, ph: 'vd 1C' + yy + 'TAA' };
+    if (i.sev === 'warn') p = { key: 'H|' + i.id, desc: 'Điền số hóa đơn cho dòng thuế' + (rf ? ' (đọc từ diễn giải: ' + (rf.kh ? rf.kh + ' ' : '') + 'số ' + rf.hd + ')' : s1.hd ? ' (lấy theo dòng cùng chứng từ)' : isOut ? ' (đề xuất số kế tiếp theo ký hiệu dùng gần nhất, sửa nếu khác hóa đơn đã phát hành)' : ' (số in trên hóa đơn của nhà cung cấp, không đoán được; ký hiệu và ngày là mẫu)'), fields: [{ k: 'hd', label: 'Số HĐ', value: hdMau, w: 100, ph: isOut ? '0000001' : 'số trên HĐ' }, kh, nhd],
       apply: v => { if (!(v.hd || '').trim()) return 'Chưa nhập số hóa đơn'; tgt.hd = v.hd.trim(); if (v.kh) tgt.kh = v.kh.trim(); if (D.parse(v.nhd)) tgt.nhd = D.parse(v.nhd); if (tgt !== j) KT.vatSync(tgt); return ''; } };
     else p = { key: 'H|' + i.id, desc: 'Điền ký hiệu và ngày hóa đơn (mẫu: ngày hóa đơn = ngày chứng từ)', fields: [kh, nhd],
       apply: v => { if (!(v.kh || '').trim()) return 'Chưa nhập ký hiệu hóa đơn'; tgt.kh = v.kh.trim(); if (D.parse(v.nhd)) tgt.nhd = D.parse(v.nhd); if (tgt !== j) KT.vatSync(tgt); return ''; } };
-  } else if (i.code === 'W21' && j && i.sev === 'warn' && j.vatOf) { p = { key: 'VS|' + i.id, desc: 'Dòng thuế tự trích: đối tượng lấy theo dòng hàng gốc.', fields: [], apply: () => { const b = S().journal.find(x => x.id === j.vatOf); if (!b || !(b.dt || b.dn || b.dc)) return 'Dòng gốc chưa có đối tượng'; KT.vatSync(b); return ''; } };
   } else if (i.code === 'W21' && j && i.sev === 'warn') {
-    const sib = S().journal.find(x => x !== j && j.ct && x.ct === j.ct && (x.dt || x.dn || x.dc)), mp = fix.matchPartner(j.dg || (sib || {}).dg || '');
-    const code = sib ? (sib.dt || sib.dn || sib.dc) : mp ? mp.code : '';
-    p = { key: 'D|' + i.id + '|vat', desc: 'Gắn đối tượng cho dòng thuế' + (sib ? ' theo dòng cùng chứng từ' : mp ? ' theo tên trong diễn giải' : ''), fields: [{ k: 'dt', label: 'Mã đối tượng', value: code, list: 'fx-pt', w: 110 }],
-      apply: v => { const cd = (v.dt || '').trim(); if (!cd) return 'Chưa có mã đối tượng'; if (!hasCode(cd)) return 'Mã đối tượng chưa có trong danh mục'; j.dt = cd; return ''; } };
+    /* đề xuất đối tượng: (1) dòng cùng chứng từ, (2) tên trong diễn giải khớp danh mục, (3) đối tượng hay dùng với TK đối ứng, (4) đối tượng lẻ mặc định (tự tạo) */
+    const base = j.vatOf ? S().journal.find(x => x.id === j.vatOf) : null, ref = base || j, pOf = x => x.dt || x.dn || x.dc || '';
+    const isOut = /^3331/.test(j.co || (c.N.get(j.id) || {}).co || '') || /^3331/.test((c.N.get(j.id) || {}).co || ''), typ = isOut ? 'KH' : 'NCC';
+    const sib = S().journal.find(x => x !== j && x !== ref && j.ct && x.ct === j.ct && pOf(x) && hasCode(pOf(x))), own = pOf(ref) && hasCode(pOf(ref)) ? pOf(ref) : '';
+    const mp = fix.matchPartner((ref.dg || '') + ' ' + (j.dg || '')), fav = (() => { const cnt = {}; S().journal.forEach(x => { const q = pOf(x), pp = q && allP().find(y => y.code === q); if (pp && pp.type === typ) cnt[q] = (cnt[q] || 0) + 1; }); const k = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0]; return k && cnt[k] >= 2 ? k : ''; })();
+    const dfl = isOut ? { code: 'KHLE', name: 'Khách lẻ' } : { code: 'NCCLE', name: 'Nhà cung cấp lẻ' };
+    const code = own || (sib ? pOf(sib) : '') || (mp ? mp.code : '') || fav || dfl.code, known = hasCode(code), nm = known ? (allP().find(x => x.code === code) || {}).name : dfl.name;
+    const src = own ? 'theo dòng hàng gốc' : sib ? 'theo dòng cùng chứng từ' : mp ? 'theo tên trong diễn giải' : fav ? 'theo đối tượng hay dùng nhất' : 'đối tượng lẻ mặc định (chưa nhận ra tên; sẽ tự tạo trong danh mục, đổi sang mã đúng nếu biết)';
+    p = { key: 'D|' + i.id + '|vat', desc: 'Gắn đối tượng cho ' + (base ? 'dòng hàng gốc và dòng thuế tự trích' : 'dòng thuế') + ': ' + src + '.', fields: [{ k: 'dt', label: 'Mã đối tượng', value: code, list: 'fx-pt', w: 110 }, { k: 'name', label: 'Tên (nếu là mã mới)', value: nm || code, w: 170 }],
+      apply: v => { const cd = (v.dt || '').trim(); if (!cd) return 'Chưa có mã đối tượng'; if (!hasCode(cd)) createPartner(cd, (v.name || '').trim() || cd, typ);
+        if (base) { if (!pOf(base)) base.dt = cd; KT.vatSync(base); if (!pOf(j)) j.dt = cd; } else j.dt = cd; return ''; } };
   } else if (i.code === 'W21' && i.sev === 'info') {
     const cd = (/Đối tượng (\S+)/.exec(i.msg) || [])[1], pt = cd && S().partners.find(x => x.code === cd);
     if (pt) p = { key: 'MST|' + cd, desc: 'Nhập mã số thuế cho ' + cd + ' ' + (pt.name || ''), fields: [{ k: 'mst', label: 'MST', value: '', w: 120 }], apply: v => { if (!(v.mst || '').trim()) return 'Chưa nhập MST'; pt.mst = v.mst.trim(); return ''; } };
@@ -5300,7 +5482,7 @@ fix.propose = i => {
 const valOf = p => Object.assign(Object.fromEntries((p.fields || []).map(x => [x.k, x.value])), fx.vals[p.key] || {});
 fix.all = () => { const m = new Map(); KT.compute().issues.concat(KT.audit()).forEach(i => { const p = fix.propose(i); if (p && p.apply && !fx.skip[p.key] && !m.has(p.key)) m.set(p.key, p); }); return m; };
 const fld = (p, x) => { const v = valOf(p)[x.k], empty = x.ty !== 'sel' && !String(v == null ? '' : v).trim();
-  return '<label class="small muted" style="display:inline-flex;gap:4px;align-items:center">' + E(x.label) + (empty ? ' <span style="color:var(--bad)">*</span>' : '') + (x.ty === 'sel' ? '<select data-c="fxf" data-key="' + E(p.key) + '" data-k="' + x.k + '">' + x.opts.map(o => '<option value="' + o[0] + '"' + (v === o[0] ? ' selected' : '') + '>' + E(o[1]) + '</option>').join('') + '</select>' : '<input data-c="fxf" data-key="' + E(p.key) + '" data-k="' + x.k + '" value="' + E(v) + '" placeholder="' + (empty ? 'Bắt buộc' : '') + '"' + (x.list ? ' list="' + x.list + '"' : '') + ' style="width:' + (x.w || 100) + 'px' + (empty ? ';border-color:var(--bad)' : '') + '" autocomplete="off">') + '</label>'; };
+  return '<label class="small muted" style="display:inline-flex;gap:4px;align-items:center">' + E(x.label) + (empty ? ' <span style="color:var(--bad)">*</span>' : '') + (x.ty === 'sel' ? '<select data-c="fxf" data-key="' + E(p.key) + '" data-k="' + x.k + '">' + x.opts.map(o => '<option value="' + o[0] + '"' + (v === o[0] ? ' selected' : '') + '>' + E(o[1]) + '</option>').join('') + '</select>' : '<input data-c="fxf" data-key="' + E(p.key) + '" data-k="' + x.k + '" value="' + E(v) + '" placeholder="' + (empty ? (x.ph || 'Bắt buộc') : '') + '"' + (x.list ? ' list="' + x.list + '"' : '') + ' style="width:' + (x.w || 100) + 'px' + (empty ? ';border-color:var(--bad)' : '') + '" autocomplete="off">') + '</label>'; };
 fix._reg = new Map();
 /** điều chỉnh kết chuyển một tháng: auto = ghi phần chênh lệch; replace = xóa kết chuyển tay và tự động của tháng rồi sinh lại */
 fix.kcFix = (m, act) => { const A = KT.auto, from = D.bom(m), to = D.eom(m), in911 = l => String(l.no).startsWith('911') || String(l.co).startsWith('911'), inM = l => String(D.parse(l.ng) || '').slice(0, 7) === m;
@@ -5704,7 +5886,7 @@ const RULE = [
   [/mua (hang|nvl|nguyen|vat lieu|vat tu|ccdc|cong cu|thuc pham|do uong)|nhap (hang|kho)/, t => /(nvl|nguyen|vat lieu|vat tu|thuc pham)/.test(t) ? '152' : /(ccdc|cong cu)/.test(t) ? '153' : '156', '@', 'Mua hàng nhập kho'],
   [/(khach|kh\b).*(chua thanh toan|chua tt|cong no|ghi no)|(ban|luu tru|tien phong|dich vu).*(chua thanh toan|cong no)/, '131', t => /(dich vu|luu tru|phong|an uong)/.test(t) ? '5113' : '5111', 'Bán chịu cho khách hàng'],
   [/(khach|kh\b|nguoi mua) .*(tra|thanh toan|chuyen) (tien|no)|thu (tien|no) .*(khach|kh\b)|khach tra/, '$', '131', 'Thu tiền khách hàng'],
-  [/(ban hang|doanh thu|xuat hoa don|cung cap dich vu|luu tru|tien phong|ban le|thu tien ban)/, '$', t => /(dich vu|luu tru|phong|an uong)/.test(t) ? '5113' : '5111', 'Bán hàng thu tiền'],
+  [/^(?!\s*(chi|tra|thanh toan|mua|nop)\b).*?(ban hang|doanh thu|xuat hoa don|cung cap dich vu|luu tru|tien phong|ban le|thu tien ban)/, '$', t => /(dich vu|luu tru|phong|an uong)/.test(t) ? '5113' : '5111', 'Bán hàng thu tiền'],
   [/(tra|thanh toan|chuyen) (tien )?(cho )?(ncc|nha cung cap|nguoi ban|cong no|no mua|tien hang)/, '331', '$', 'Trả tiền người bán'],
   [/chiet khau thanh toan/, '635', '$', 'Chiết khấu thanh toán cho người mua (chi phí tài chính)'], [/chiet khau thuong mai|giam gia hang ban|hang ban (bi )?tra lai/, '5211', '131', 'Giảm trừ doanh thu'],
   [/(hoa hong|quang cao|marketing|van chuyen hang ban|khuyen mai)/, '6418', '$', 'Chi phí bán hàng'],
@@ -5794,12 +5976,12 @@ KT.VAT_RATES = ['10', '8', '5', '0', 'KCT', 'KKKNT', 'KHD'];
 const RATE = t => ({ '0': 0, '5': .05, '8': .08, '10': .1 })[String(t == null ? '' : t).replace('%', '').trim()];
 KT.vatRate = RATE;
 const kindOf = j => { const no = String(j.no || ''), co = String(j.co || ''); if (/^(133|3331)/.test(no) || /^(133|3331)/.test(co)) return '';
-  if (/^(511|515|711)/.test(co) && /^(11|13|33|14)/.test(no)) return 'out';
+  if (/^(511|711)/.test(co) && /^(11|13|33|14)/.test(no)) return 'out';   // 515 (lãi tiền gửi, cổ tức, chênh lệch tỷ giá) không chịu thuế GTGT: không đề xuất tách thuế
   if (/^(15|21|24|6|8)/.test(no) && !/^(632|635|811|821|214)/.test(no) && /^(11|331|141|338|336)/.test(co)) return 'in'; return ''; };
 const NOVAT = /(luong|bhxh|bhyt|bhtn|bao hiem|kpcd|cong doan|thue|le phi|mon bai|khau hao|lai vay|tra lai|phan bo|ket chuyen|tam ung|hoan ung|chiet khau|hoa hong|phat|boi thuong|tien coc|dat coc|ky quy|gop von|von gop|vay|hoc phi|tu thien|ung ho)/;
 KT.vatCand = j => !j.tag && !j.vatOf && !!kindOf(j) && KT.num(j.st) > 0 && !NOVAT.test(KT.imp.norm(j.dg || '')) && String(j.thue || '').toUpperCase() !== 'KCT' && String(j.thue || '').toUpperCase() !== 'KHD';
 KT.vatKind = kindOf;
-const findVat = (j, kind, amt) => S().journal.find(x => x !== j && !x.vatOf && (D.parse(x.ng) || '') === (D.parse(j.ng) || '') && (kind === 'in' ? /^133/.test(x.no) : /^3331/.test(x.co)) && ((j.ct && x.ct === j.ct) || (j.hd && x.hd === j.hd) || Math.abs(KT.num(x.st) - amt) <= 1));
+const findVat = (j, kind, amt) => S().journal.find(x => x !== j && !x.vatOf && (D.parse(x.ng) || '') === (D.parse(j.ng) || '') && (kind === 'in' ? /^133/.test(x.no) : /^(3331|333$)/.test(x.co)) && ((j.ct && x.ct === j.ct) || (j.hd && x.hd === j.hd) || Math.abs(KT.num(x.st) - amt) <= 1));
 /** đồng bộ dòng thuế của dòng gốc j. Trả về 'add' | 'upd' | 'del' | '' */
 KT.vatSync = (j, opt) => {
   if (!j || j.tag || j.vatOf) return ''; const J = S().journal, r = RATE(j.thue), kind = kindOf(j), base = KT.num(j.st); let v = J.find(x => x.vatOf === j.id);
@@ -6148,14 +6330,14 @@ KT.fix.propose = i => { const c = S().company;
 (function (G) {
 'use strict';
 const KT = G.KT, UI = KT.ui, D = KT.d, S = () => KT.S, f = KT.f, A = KT.auto;
-const ORD = { bl: 1, kh: 2, pb: 3, sx: 4, gtgt: 5, tndn: 6, kc: 7 };
-const NAME = { bl: 'lương', kh: 'khấu hao', pb: 'phân bổ 242', sx: 'giá thành 154', gtgt: 'khấu trừ GTGT', tndn: 'thuế TNDN', kc: 'kết chuyển 911' };
+const ORD = { bl: 1, kh: 2, pb: 3, dc: 4, sx: 5, gtgt: 6, tndn: 7, kc: 8 };
+const NAME = { bl: 'lương', kh: 'khấu hao', pb: 'phân bổ 242', dc: 'ghi nhận chi phí còn thiếu', sx: 'giá thành 154', gtgt: 'khấu trừ GTGT', tndn: 'thuế TNDN', kc: 'kết chuyển 911' };
 const dedup = r => { const pr = l => String(l.no).slice(0, 3) + '/' + String(l.co).slice(0, 3) + '|' + String(l.ng || '').slice(0, 7); const have = new Set(S().journal.filter(l => !l.tag).map(pr)); return r.lines.filter(l => !have.has(pr(l))); };
 const lbl = (from, to) => { const y = to.slice(0, 4); if (from === D.bom(to.slice(0, 7)) && from.slice(0, 7) === to.slice(0, 7)) return 'tháng ' + to.slice(5, 7) + '/' + y;
   if (from.slice(5) === '01-01' && to.slice(5) === '12-31' && from.slice(0, 4) === y) return 'năm ' + y; const mf = +from.slice(5, 7), mt = +to.slice(5, 7);
   if (from.slice(8) === '01' && mt - mf === 2 && mf % 3 === 1 && to === D.eom(to.slice(0, 7))) return 'quý ' + Math.ceil(mt / 3) + '/' + y; return 'từ ' + D.fmt(from) + ' đến ' + D.fmt(to); };
 const regen = (kind, key) => {
-  if (kind === 'bl') return dedup(A.payroll(key)); if (kind === 'kh') return dedup(A.depreciation(key)); if (kind === 'pb') return dedup(A.prepaid(key)); if (kind === 'sx') return dedup(A.production(key));
+  if (kind === 'bl') return dedup(A.payroll(key)); if (kind === 'kh') return dedup(A.depreciation(key)); if (kind === 'pb') return dedup(A.prepaid(key)); if (kind === 'sx') return dedup(A.production(key)); if (kind === 'dc') return A.accrue(key).lines;
   if (kind === 'gtgt') return A.vatOffset(key).lines; if (kind === 'tndn') return A.citExpense(+key).lines;
   if (kind === 'kc') { const m = /^(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/.exec(key); return m ? A.closing(m[1], m[2], lbl(m[1], m[2])).lines : null; } return null; };
 const sig = ls => ls.map(l => [l.no, l.co, Math.round(KT.num(l.st)), l.dh || '', D.parse(l.ng) || l.ng].join('|')).sort().join(';');
@@ -6305,4 +6487,6 @@ G.addEventListener('error', e => { console.error(e.error || e.message); });
 })(window);
 
 </script>
+<!-- build 2026-11-23 -->
+
 </body></html>
