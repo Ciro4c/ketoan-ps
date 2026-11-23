@@ -159,6 +159,10 @@ table.t td.neg{color:var(--bad)}
 
 .brand{position:relative}.brand .dlapp{order:3;margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:15px;line-height:1;padding:0}.brand .dlapp:hover{background:rgba(255,255,255,.12)}
 .brand .dlapp+.dlapp{margin-left:4px}
+/* thông báo: nền tối, chữ trắng; nút trong thông báo phải đọc được (trước đây chữ trắng trên nền nút trắng) */
+.toast{background:#1f2937;color:#fff;font-size:14px;line-height:1.45;padding:10px 14px;border:1px solid #374151}
+.toast .btn{background:#fff;color:#111827;border:1px solid #fff;font-weight:600}
+.toast .btn:hover{background:#e5e7eb;color:#111827}
 
 </style></head><body>
 <div id="app" class="app"></div>
@@ -5397,7 +5401,15 @@ fix.propose = i => {
         if (base) { if (!pOf(base)) base.dt = cd; KT.vatSync(base); if (!pOf(j)) j.dt = cd; } else j.dt = cd; return ''; } };
   } else if (i.code === 'W21' && i.sev === 'info') {
     const cd = (/Đối tượng (\S+)/.exec(i.msg) || [])[1], pt = cd && S().partners.find(x => x.code === cd);
-    if (pt) p = { key: 'MST|' + cd, desc: 'Nhập mã số thuế cho ' + cd + ' ' + (pt.name || ''), fields: [{ k: 'mst', label: 'MST', value: '', w: 120 }], apply: v => { if (!(v.mst || '').trim()) return 'Chưa nhập MST'; pt.mst = v.mst.trim(); return ''; } };
+    if (pt) { /* đề xuất MST: (1) ghi trong diễn giải các dòng của đối tượng, (2) đối tượng cùng tên đã có MST, (3) số CCCD 12 số (cá nhân), (4) để trống kèm hướng dẫn tra cứu */
+      const rx = /(?:\bmst\b|ma so thue|mã số thuế)[\s:#.\-]*([0-9]{10}(?:[\s\-]?[0-9]{3})?)\b/i, norm = x => nz(x || '');
+      let sg = '', src = '';
+      for (const x of S().journal) { if (![x.dt, x.dn, x.dc].includes(cd)) continue; const m = rx.exec(String(x.dg || '') + ' ' + String(x.nhd || '')) || rx.exec(String(x.dg || '')); if (m) { sg = m[1].replace(/\s/g, ''); src = 'đọc từ diễn giải “' + String(x.dg).slice(0, 40) + '”'; break; } }
+      if (!sg) { const q = S().partners.find(x => x !== pt && x.mst && norm(x.name) && norm(x.name) === norm(pt.name)); if (q) { sg = q.mst; src = 'đối tượng ' + q.code + ' cùng tên đã có MST'; } }
+      if (!sg && /^\d{12}$/.test(String(pt.cccd || '').trim())) { sg = String(pt.cccd).trim(); src = 'cá nhân: dùng số CCCD làm mã số thuế'; }
+      const isRetail = /\b(khach le|le)\b/.test(norm(pt.name));
+      p = { key: 'MST|' + cd, desc: 'Nhập mã số thuế cho ' + cd + ' ' + (pt.name || '') + (sg ? ' (đề xuất: ' + src + ')' : isRetail ? ' (khách lẻ không có MST: có thể Bỏ qua)' : ' (chưa tìm thấy trong sổ; tra cứu tại tracuunnt.gdt.gov.vn theo tên hoặc số điện thoại, hoặc Bỏ qua nếu là cá nhân không kinh doanh)'),
+        fields: [{ k: 'mst', label: 'MST', value: sg, w: 130, ph: '10 hoặc 13 số' }], apply: v => { const m = (v.mst || '').replace(/[\s.]/g, ''); if (!m) return 'Chưa nhập MST'; if (!/^\d{10}(-?\d{3})?$/.test(m) && !/^\d{12}$/.test(m)) return 'MST phải gồm 10 hoặc 13 số (cá nhân có thể dùng 12 số CCCD)'; pt.mst = m; return ''; } }; }
   } else if (/^(W23|W24|W25|W26)$/.test(i.code)) {
     const cd = (/Nhân viên (\S+)/.exec(i.msg) || [])[1], e = cd && S().employees.find(x => x.code === cd);
     const fd = { W23: ['cccd', 'Số CCCD'], W24: ['soBHXH', 'Số sổ BHXH'], W25: ['mst', 'MST cá nhân'], W26: ['luongCB', 'Lương cơ bản'] }[i.code];
